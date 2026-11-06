@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Giám Sát Cảm Biến IoT (STM32 & ESP32-C3)</title>
+    <!-- Tailwind CSS qua CDN để giao diện hiện đại -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Thư viện Chart.js để vẽ đồ thị thời gian thực -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Thư viện MQTT.js chạy trực tiếp trên trình duyệt qua WebSocket -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
+    <div class="max-w-6xl mx-auto space-y-6">
+
+        <!-- HEADER -->
+        <header class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-white flex items-center gap-3">
+                    <span class="inline-block w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Bảng Điều Khiển Cảm Biến IoT (STM32 ➜ ESP32-C3 ➜ Web)
+                </h1>
+                <p class="text-sm text-slate-400 mt-1">Dữ liệu được truyền thời gian thực qua giao thức MQTT over WebSocket</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="status-badge" class="px-3 py-1 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Đang kết nối Cloud...
+                </span>
+                <span class="text-xs text-slate-400" id="last-update">Cập nhật: Chưa có</span>
+            </div>
+        </header>
+
+        <!-- CẤU HÌNH TOPIC NHANH -->
+        <section class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-3">
+            <span class="text-sm text-slate-300 whitespace-nowrap font-medium">MQTT Topic đang lắng nghe:</span>
+            <input type="text" id="topic-input" value="my_iot_project/stm32_sensor_data" 
+                   class="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-emerald-400 flex-1 w-full focus:outline-none focus:border-emerald-500">
+            <button onclick="changeTopic()" 
+                    class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-1.5 rounded-lg font-medium transition shadow">
+                Đổi Kênh
+            </button>
+        </section>
+
+        <!-- VALUE CARDS (THẺ CHỈ SỐ) -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+            <!-- Điện áp Biến trở (Voltage) -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 relative overflow-hidden shadow-lg border-emerald-500/30">
+                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Điện Áp Biến Trở (Voltage)</div>
+                <div class="flex items-baseline gap-2">
+                    <span id="val-volt" class="text-4xl font-black text-emerald-400">0.00</span>
+                    <span class="text-xl font-bold text-slate-500">V</span>
+                </div>
+                <!-- Thanh tiến trình điện áp -->
+                <div class="w-full bg-slate-700/60 rounded-full h-2 mt-3 overflow-hidden">
+                    <div id="bar-volt" class="bg-emerald-400 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <div class="mt-2 text-xs text-slate-400">Thang đo: 0.00V - 3.30V (PA0)</div>
+            </div>
+
+            <!-- Tỷ lệ góc xoay (%) -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 relative overflow-hidden shadow-lg">
+                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Tỷ Lệ Xoay (Level)</div>
+                <div class="flex items-baseline gap-2">
+                    <span id="val-percent" class="text-4xl font-extrabold text-sky-400">0.0</span>
+                    <span class="text-xl font-bold text-slate-500">%</span>
+                </div>
+                <div class="mt-4 text-xs text-slate-400">Góc chiết áp: 0% ➜ 100%</div>
+            </div>
+
+            <!-- Giá trị ADC 12-bit (Raw) -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 relative overflow-hidden shadow-lg">
+                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Giá Trị ADC 12-bit (Raw)</div>
+                <div class="flex items-baseline gap-2">
+                    <span id="val-raw" class="text-4xl font-extrabold text-amber-400">0</span>
+                    <span class="text-xl font-bold text-slate-500">/4095</span>
+                </div>
+                <div class="mt-4 text-xs text-slate-400">Độ phân giải: 12-bit ADC1</div>
+            </div>
+
+            <!-- Tổng số gói tin -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 relative overflow-hidden shadow-lg">
+                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Tổng số gói tin</div>
+                <div class="flex items-baseline gap-2">
+                    <span id="val-count" class="text-4xl font-extrabold text-violet-400">0</span>
+                    <span class="text-xl font-bold text-slate-500">gói</span>
+                </div>
+                <div class="mt-4 text-xs text-slate-400">Tốc độ làm mới: 500ms/lần</div>
+            </div>
+        </section>
+
+        <!-- ĐỒ THỊ THỜI GIAN THỰC -->
+        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
+            <h2 class="text-lg font-bold text-white mb-4">Biểu đồ giám sát thời gian thực</h2>
+            <div class="h-80 w-full">
+                <canvas id="sensorChart"></canvas>
+            </div>
+        </section>
+
+        <!-- CONSOLE LOG DỮ LIỆU THÔ (RAW LOG) -->
+        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-sm font-semibold text-slate-300">Nhật ký gói tin thô (Raw JSON Log)</h3>
+                <button onclick="clearLogs()" class="text-xs text-slate-400 hover:text-rose-400 transition">Xóa Log</button>
+            </div>
+            <div id="log-console" class="bg-slate-950 font-mono text-xs text-emerald-400 p-4 rounded-xl h-44 overflow-y-auto space-y-1 border border-slate-800">
+                <div class="text-slate-500">// Đang chờ dữ liệu từ ESP32-C3...</div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- SCRIPT XỬ LÝ MQTT & VẼ ĐỒ THỊ -->
+    <script>
+        let packetCount = 0;
+        let currentTopic = document.getElementById('topic-input').value;
+
+        // 1. CẤU HÌNH VÀ KHỞI TẠO ĐỒ THỊ CHART.JS
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+        const sensorChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Điện áp Biến trở (V)',
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                        data: [],
+                        borderWidth: 3,
+                        tension: 0.3,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Tỷ lệ xoay (%)',
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        data: [],
+                        borderWidth: 2,
+                        tension: 0.3,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        ticks: { color: '#94a3b8' },
+                        grid: { color: '#334155' }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        min: 0,
+                        max: 3.5,
+                        title: { display: true, text: 'Điện áp (Volt)', color: '#10b981' },
+                        ticks: { color: '#10b981' },
+                        grid: { color: '#334155' }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        min: 0,
+                        max: 100,
+                        title: { display: true, text: 'Tỷ lệ (%)', color: '#38bdf8' },
+                        ticks: { color: '#38bdf8' },
+                        grid: { drawOnChartArea: false }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#e2e8f0' } }
+                }
+            }
+        });
+
+        // 2. KẾT NỐI TỚI HIVEMQ QUA WEBSOCKET (PORT 8000 HOẶC 8884)
+        // Lưu ý: ESP32 dùng TCP 1883, còn trình duyệt Web dùng WebSocket wss:// hoặc ws://
+        const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
+            clientId: 'web_dashboard_' + Math.random().toString(16).substr(2, 8)
+        });
+
+        const statusBadge = document.getElementById('status-badge');
+
+        client.on('connect', () => {
+            statusBadge.innerText = '● Đã kết nối Cloud Broker';
+            statusBadge.className = 'px-3 py-1 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+            client.subscribe(currentTopic, (err) => {
+                if (!err) {
+                    addLog(`[SYSTEM] Đã đăng ký lắng nghe topic: ${currentTopic}`);
+                }
+            });
+        });
+
+        client.on('offline', () => {
+            statusBadge.innerText = '○ Mất kết nối Cloud';
+            statusBadge.className = 'px-3 py-1 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30';
+        });
+
+        // 3. LẮNG NGHE KHI CÓ DỮ LIỆU TỪ ESP32-C3 GỬI LÊN
+        client.on('message', (topic, message) => {
+            const rawStr = message.toString();
+            const timeStr = new Date().toLocaleTimeString();
+            document.getElementById('last-update').innerText = 'Cập nhật: ' + timeStr;
+
+            packetCount++;
+            document.getElementById('val-count').innerText = packetCount;
+            addLog(`[${timeStr}] Topic: ${topic} ➜ ${rawStr}`);
+
+            try {
+                // Parse gói tin JSON từ STM32 -> ESP32 -> Cloud
+                const data = JSON.parse(rawStr);
+
+                // Nếu có thông điệp hoặc sự kiện nút bấm
+                if (data.msg !== undefined || data.btn !== undefined) {
+                    const btnMsg = data.msg || data.btn;
+                    const btnEl = document.getElementById('val-btn');
+                    const cardEl = document.getElementById('card-btn');
+                    const countEl = document.getElementById('val-btn-count');
+
+                    btnEl.innerText = btnMsg;
+                    btnEl.className = 'text-2xl font-black text-rose-400 animate-bounce';
+                    cardEl.className = 'bg-slate-800 border-2 border-rose-500 rounded-2xl p-6 relative overflow-hidden shadow-2xl transition-all duration-300';
+                    
+                    if (data.count !== undefined) {
+                        countEl.innerText = 'Số lần nhấn: ' + data.count + ' (Lúc: ' + timeStr + ')';
+                    }
+
+                    // Sau 2 giây thì tắt hiệu ứng rung
+                    setTimeout(() => {
+                        btnEl.className = 'text-2xl font-black text-emerald-400';
+                        cardEl.className = 'bg-slate-800 border border-emerald-500/50 rounded-2xl p-6 relative overflow-hidden shadow-lg transition-all duration-300';
+                    }, 2000);
+                }
+
+                // 1. Dữ liệu Điện áp biến trở (Volt, Percent, Raw)
+                if (data.volt !== undefined) {
+                    const voltVal = parseFloat(data.volt).toFixed(2);
+                    document.getElementById('val-volt').innerText = voltVal;
+                    // Cập nhật thanh tiến trình %
+                    const barWidth = Math.min(100, Math.max(0, (voltVal / 3.3) * 100));
+                    document.getElementById('bar-volt').style.width = barWidth + '%';
+                }
+                if (data.percent !== undefined) {
+                    document.getElementById('val-percent').innerText = parseFloat(data.percent).toFixed(1);
+                }
+                if (data.raw !== undefined) {
+                    document.getElementById('val-raw').innerText = data.raw;
+                }
+
+                // Cập nhật biểu đồ (giữ tối đa 25 điểm gần nhất)
+                if (sensorChart.data.labels.length > 25) {
+                    sensorChart.data.labels.shift();
+                    sensorChart.data.datasets[0].data.shift();
+                    sensorChart.data.datasets[1].data.shift();
+                }
+
+                sensorChart.data.labels.push(timeStr);
+                sensorChart.data.datasets[0].data.push(data.volt !== undefined ? data.volt : (data.temp ?? null));
+                sensorChart.data.datasets[1].data.push(data.percent !== undefined ? data.percent : (data.hum ?? null));
+                sensorChart.update();
+
+            } catch (e) {
+                addLog(`[LỖI PARSE] Dữ liệu nhận được không phải định dạng JSON hợp lệ.`);
+            }
+        });
+
+        function changeTopic() {
+            const newTopic = document.getElementById('topic-input').value.trim();
+            if (newTopic && newTopic !== currentTopic) {
+                client.unsubscribe(currentTopic);
+                currentTopic = newTopic;
+                client.subscribe(currentTopic);
+                addLog(`[SYSTEM] Đã chuyển sang lắng nghe topic mới: ${currentTopic}`);
+            }
+        }
+
+        function addLog(msg) {
+            const logBox = document.getElementById('log-console');
+            const item = document.createElement('div');
+            item.innerText = msg;
+            logBox.appendChild(item);
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('log-console').innerHTML = '';
+        }
+    </script>
+</body>
+</html>
+

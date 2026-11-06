@@ -1,0 +1,28 @@
+# PlatformIO build artifacts
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Build outputs
+build/
+*.bin
+*.elf
+*.hex
+*.o
+*.a
+*.map
+*.d
+*.su
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.bak
+
+# OS generated
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+compile_commands.json
