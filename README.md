@@ -112,3 +112,4 @@ ESP32-IoT-Gateway/
 ## 📄 Bản quyền & Tác giả
 - Tác giả: **v2tAcodin**
 - License: MIT License
+
