@@ -3,28 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ Thống Giám Sát Cảm Biến IoT (STM32 & ESP32-C3)</title>
-    <!-- Tailwind CSS qua CDN để giao diện hiện đại -->
+    <title>Hệ Thống Giám Sát Mực Nước & Cảnh Báo Ngập Lụt IoT (STM32 & ESP32-C3)</title>
+    <!-- Tailwind CSS qua CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Thư viện Chart.js để vẽ đồ thị thời gian thực -->
+    <!-- Chart.js để vẽ đồ thị thời gian thực -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Thư viện MQTT.js chạy trực tiếp trên trình duyệt qua WebSocket -->
+    <!-- MQTT.js chạy trực tiếp trên trình duyệt qua WebSocket Secure -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-6 font-sans">
     <div class="max-w-6xl mx-auto space-y-6">
 
         <!-- HEADER -->
         <header class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-                <h1 class="text-2xl font-bold text-white flex items-center gap-3">
-                    <span class="inline-block w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
-                    Bảng Điều Khiển Cảm Biến IoT (STM32 ➜ ESP32-C3 ➜ Web)
-                </h1>
-                <p class="text-sm text-slate-400 mt-1">Dữ liệu được truyền thời gian thực qua giao thức MQTT over WebSocket</p>
+                <div class="flex items-center gap-3">
+                    <span class="inline-block w-3.5 h-3.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                    <h1 class="text-xl md:text-2xl font-bold text-white tracking-wide">
+                        HỆ THỐNG GIÁM SÁT MỰC NƯỚC & CẢNH BÁO NGẬP LỤT IOT
+                    </h1>
+                </div>
+                <p class="text-xs md:text-sm text-slate-400 mt-1">
+                    Cảm biến áp suất thủy tĩnh chìm (STM32F103) ➜ ESP32-C3 Gateway ➜ Cloud Broker (MQTT over WSS)
+                </p>
             </div>
-            <div class="flex items-center gap-3">
-                <span id="status-badge" class="px-3 py-1 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            <div class="flex flex-wrap items-center gap-3">
+                <span id="water-alert-badge" class="px-3 py-1.5 text-xs font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    ✔ AN TOÀN / BÌNH THƯỜNG
+                </span>
+                <span id="status-badge" class="px-3 py-1.5 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
                     Đang kết nối Cloud...
                 </span>
                 <span class="text-xs text-slate-400" id="last-update">Cập nhật: Chưa có</span>
@@ -32,66 +39,91 @@
         </header>
 
         <!-- CẤU HÌNH TOPIC NHANH -->
-        <section class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-3">
-            <span class="text-sm text-slate-300 whitespace-nowrap font-medium">MQTT Topic đang lắng nghe:</span>
+        <section class="bg-slate-800/70 border border-slate-700/60 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-3 shadow">
+            <span class="text-xs md:text-sm text-slate-300 whitespace-nowrap font-medium flex items-center gap-2">
+                <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                MQTT Topic đang lắng nghe:
+            </span>
             <input type="text" id="topic-input" value="my_iot_project/stm32_sensor_data" 
-                   class="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-emerald-400 flex-1 w-full focus:outline-none focus:border-emerald-500">
+                   class="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-xs md:text-sm text-cyan-400 flex-1 w-full focus:outline-none focus:border-cyan-500 font-mono">
             <button onclick="changeTopic()" 
-                    class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-1.5 rounded-lg font-medium transition shadow">
+                    class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs md:text-sm px-4 py-1.5 rounded-lg font-medium transition shadow whitespace-nowrap">
                 Đổi Kênh
             </button>
         </section>
 
-        <!-- VALUE CARDS (THẺ CHỈ SỐ) -->
-        <section class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-            <!-- Điện áp Biến trở (Voltage) -->
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 relative overflow-hidden shadow-lg border-emerald-500/30">
-                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Điện Áp Biến Trở (Voltage)</div>
+        <!-- VALUE CARDS (THẺ THÔNG SỐ MỰC NƯỚC) -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
+            <!-- THẺ 1: MỰC NƯỚC HIỆN TẠI (CM) -->
+            <div class="bg-slate-800 border-2 border-cyan-500/40 rounded-2xl p-5 relative overflow-hidden shadow-lg bg-gradient-to-br from-slate-800 to-cyan-950/20">
+                <div class="text-xs uppercase tracking-wider font-bold text-cyan-400 mb-2 flex items-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+                    Mực Nước Hiện Tại
+                </div>
                 <div class="flex items-baseline gap-2">
-                    <span id="val-volt" class="text-4xl font-black text-emerald-400">0.00</span>
-                    <span class="text-xl font-bold text-slate-500">V</span>
+                    <span id="val-level" class="text-4xl font-black text-cyan-300">0.0</span>
+                    <span class="text-xl font-bold text-cyan-500">cm</span>
                 </div>
-                <!-- Thanh tiến trình điện áp -->
-                <div class="w-full bg-slate-700/60 rounded-full h-2 mt-3 overflow-hidden">
-                    <div id="bar-volt" class="bg-emerald-400 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                <!-- Thanh tiến trình mô phỏng mức nước -->
+                <div class="w-full bg-slate-700/60 rounded-full h-2.5 mt-3 overflow-hidden">
+                    <div id="bar-water" class="bg-gradient-to-r from-cyan-500 to-blue-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
-                <div class="mt-2 text-xs text-slate-400">Thang đo: 0.00V - 3.30V (PA0)</div>
+                <div class="mt-2 text-xs text-slate-400 flex justify-between">
+                    <span>Quy đổi: <strong id="val-level-m" class="text-slate-300">0.00</strong> m</span>
+                    <span class="text-slate-500">Max: 500 cm</span>
+                </div>
             </div>
 
-            <!-- Tỷ lệ góc xoay (%) -->
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 relative overflow-hidden shadow-lg">
-                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Tỷ Lệ Xoay (Level)</div>
+            <!-- THẺ 2: TỶ LỆ DÂNG NƯỚC (%) -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 relative overflow-hidden shadow-lg">
+                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Tỷ Lệ Chiều Cao Cột Nước</div>
                 <div class="flex items-baseline gap-2">
-                    <span id="val-percent" class="text-4xl font-extrabold text-sky-400">0.0</span>
+                    <span id="val-percent" class="text-4xl font-extrabold text-blue-400">0.0</span>
                     <span class="text-xl font-bold text-slate-500">%</span>
                 </div>
-                <div class="mt-4 text-xs text-slate-400">Góc chiết áp: 0% ➜ 100%</div>
-            </div>
-
-            <!-- Giá trị ADC 12-bit (Raw) -->
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 relative overflow-hidden shadow-lg">
-                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Giá Trị ADC 12-bit (Raw)</div>
-                <div class="flex items-baseline gap-2">
-                    <span id="val-raw" class="text-4xl font-extrabold text-amber-400">0</span>
-                    <span class="text-xl font-bold text-slate-500">/4095</span>
+                <div class="mt-4 text-xs text-slate-400">
+                    Thang đo danh định: <strong class="text-slate-300">0 - 5.0 mét</strong>
                 </div>
-                <div class="mt-4 text-xs text-slate-400">Độ phân giải: 12-bit ADC1</div>
             </div>
 
-            <!-- Tổng số gói tin -->
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 relative overflow-hidden shadow-lg">
-                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Tổng số gói tin</div>
+            <!-- THẺ 3: ÁP SUẤT THỦY TĨNH (BAR) -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 relative overflow-hidden shadow-lg">
+                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Áp Suất Thủy Tĩnh (P = ρgh)</div>
+                <div class="flex items-baseline gap-2">
+                    <span id="val-pressure" class="text-4xl font-extrabold text-emerald-400">0.000</span>
+                    <span class="text-lg font-bold text-slate-500">Bar</span>
+                </div>
+                <div class="mt-4 text-xs text-slate-400 flex justify-between items-center">
+                    <span>Điện áp: <strong id="val-volt" class="text-slate-300">0.00</strong> V</span>
+                    <span>ADC: <strong id="val-raw" class="text-slate-400">0</strong></span>
+                </div>
+            </div>
+
+            <!-- THẺ 4: TỔNG SỐ GÓI TIN -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 relative overflow-hidden shadow-lg">
+                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Lưu Lượng Gói Tin (Packets)</div>
                 <div class="flex items-baseline gap-2">
                     <span id="val-count" class="text-4xl font-extrabold text-violet-400">0</span>
                     <span class="text-xl font-bold text-slate-500">gói</span>
                 </div>
-                <div class="mt-4 text-xs text-slate-400">Tốc độ làm mới: 500ms/lần</div>
+                <div class="mt-4 text-xs text-slate-400 flex justify-between items-center">
+                    <span>Chu kỳ: ~300ms/lần</span>
+                    <span class="text-emerald-400 text-xs font-mono">QoS 0</span>
+                </div>
             </div>
         </section>
 
         <!-- ĐỒ THỊ THỜI GIAN THỰC -->
         <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
-            <h2 class="text-lg font-bold text-white mb-4">Biểu đồ giám sát thời gian thực</h2>
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                    Đồ Thị Mực Nước Theo Thời Gian Thực
+                </h2>
+                <span class="text-xs text-slate-400 bg-slate-900/80 px-3 py-1 rounded-full border border-slate-700">
+                    Giữ 30 điểm đo gần nhất
+                </span>
+            </div>
             <div class="h-80 w-full">
                 <canvas id="sensorChart"></canvas>
             </div>
@@ -100,8 +132,11 @@
         <!-- CONSOLE LOG DỮ LIỆU THÔ (RAW LOG) -->
         <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
             <div class="flex justify-between items-center mb-3">
-                <h3 class="text-sm font-semibold text-slate-300">Nhật ký gói tin thô (Raw JSON Log)</h3>
-                <button onclick="clearLogs()" class="text-xs text-slate-400 hover:text-rose-400 transition">Xóa Log</button>
+                <h3 class="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    Nhật ký gói tin JSON từ ESP32-C3 Gateway
+                </h3>
+                <button onclick="clearLogs()" class="text-xs text-slate-400 hover:text-rose-400 transition bg-slate-900 px-2.5 py-1 rounded border border-slate-700">Xóa Nhật Ký</button>
             </div>
             <div id="log-console" class="bg-slate-950 font-mono text-xs text-emerald-400 p-4 rounded-xl h-44 overflow-y-auto space-y-1 border border-slate-800">
                 <div class="text-slate-500">// Đang chờ dữ liệu từ ESP32-C3...</div>
@@ -123,21 +158,23 @@
                 labels: [],
                 datasets: [
                     {
-                        label: 'Điện áp Biến trở (V)',
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                        label: 'Mực nước (cm)',
+                        borderColor: '#06b6d4', // cyan-500
+                        backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                        fill: true,
                         data: [],
                         borderWidth: 3,
-                        tension: 0.3,
+                        tension: 0.35,
                         yAxisID: 'y'
                     },
                     {
-                        label: 'Tỷ lệ xoay (%)',
-                        borderColor: '#38bdf8',
-                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        label: 'Điện áp cảm biến (V)',
+                        borderColor: '#10b981', // emerald-500
+                        backgroundColor: 'transparent',
                         data: [],
                         borderWidth: 2,
-                        tension: 0.3,
+                        borderDash: [4, 4],
+                        tension: 0.2,
                         yAxisID: 'y1'
                     }
                 ]
@@ -145,9 +182,13 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 scales: {
                     x: {
-                        ticks: { color: '#94a3b8' },
+                        ticks: { color: '#94a3b8', font: { size: 11 } },
                         grid: { color: '#334155' }
                     },
                     y: {
@@ -155,9 +196,9 @@
                         display: true,
                         position: 'left',
                         min: 0,
-                        max: 3.5,
-                        title: { display: true, text: 'Điện áp (Volt)', color: '#10b981' },
-                        ticks: { color: '#10b981' },
+                        suggestedMax: 100, // Tự co giãn linh hoạt nếu mực nước cao hơn
+                        title: { display: true, text: 'Mực nước (cm)', color: '#06b6d4', font: { weight: 'bold' } },
+                        ticks: { color: '#06b6d4' },
                         grid: { color: '#334155' }
                     },
                     y1: {
@@ -165,29 +206,29 @@
                         display: true,
                         position: 'right',
                         min: 0,
-                        max: 100,
-                        title: { display: true, text: 'Tỷ lệ (%)', color: '#38bdf8' },
-                        ticks: { color: '#38bdf8' },
+                        max: 3.5,
+                        title: { display: true, text: 'Điện áp (Volt)', color: '#10b981', font: { weight: 'bold' } },
+                        ticks: { color: '#10b981' },
                         grid: { drawOnChartArea: false }
                     }
                 },
                 plugins: {
-                    legend: { labels: { color: '#e2e8f0' } }
+                    legend: { labels: { color: '#e2e8f0', font: { size: 12 } } }
                 }
             }
         });
 
-        // 2. KẾT NỐI TỚI HIVEMQ QUA WEBSOCKET (PORT 8000 HOẶC 8884)
-        // Lưu ý: ESP32 dùng TCP 1883, còn trình duyệt Web dùng WebSocket wss:// hoặc ws://
+        // 2. KẾT NỐI TỚI HIVEMQ QUA WEBSOCKET SECURE (WSS PORT 8884)
         const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
-            clientId: 'web_dashboard_' + Math.random().toString(16).substr(2, 8)
+            clientId: 'water_monitor_' + Math.random().toString(16).substr(2, 8)
         });
 
         const statusBadge = document.getElementById('status-badge');
+        const alertBadge = document.getElementById('water-alert-badge');
 
         client.on('connect', () => {
             statusBadge.innerText = '● Đã kết nối Cloud Broker';
-            statusBadge.className = 'px-3 py-1 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+            statusBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
             client.subscribe(currentTopic, (err) => {
                 if (!err) {
                     addLog(`[SYSTEM] Đã đăng ký lắng nghe topic: ${currentTopic}`);
@@ -197,10 +238,10 @@
 
         client.on('offline', () => {
             statusBadge.innerText = '○ Mất kết nối Cloud';
-            statusBadge.className = 'px-3 py-1 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30';
+            statusBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30';
         });
 
-        // 3. LẮNG NGHE KHI CÓ DỮ LIỆU TỪ ESP32-C3 GỬI LÊN
+        // 3. LẮNG NGHE VÀ GIẢI MÃ BẢN TIN JSON TỪ ESP32-C3
         client.on('message', (topic, message) => {
             const rawStr = message.toString();
             const timeStr = new Date().toLocaleTimeString();
@@ -211,60 +252,80 @@
             addLog(`[${timeStr}] Topic: ${topic} ➜ ${rawStr}`);
 
             try {
-                // Parse gói tin JSON từ STM32 -> ESP32 -> Cloud
                 const data = JSON.parse(rawStr);
 
-                // Nếu có thông điệp hoặc sự kiện nút bấm
-                if (data.msg !== undefined || data.btn !== undefined) {
-                    const btnMsg = data.msg || data.btn;
-                    const btnEl = document.getElementById('val-btn');
-                    const cardEl = document.getElementById('card-btn');
-                    const countEl = document.getElementById('val-btn-count');
-
-                    btnEl.innerText = btnMsg;
-                    btnEl.className = 'text-2xl font-black text-rose-400 animate-bounce';
-                    cardEl.className = 'bg-slate-800 border-2 border-rose-500 rounded-2xl p-6 relative overflow-hidden shadow-2xl transition-all duration-300';
-                    
-                    if (data.count !== undefined) {
-                        countEl.innerText = 'Số lần nhấn: ' + data.count + ' (Lúc: ' + timeStr + ')';
-                    }
-
-                    // Sau 2 giây thì tắt hiệu ứng rung
-                    setTimeout(() => {
-                        btnEl.className = 'text-2xl font-black text-emerald-400';
-                        cardEl.className = 'bg-slate-800 border border-emerald-500/50 rounded-2xl p-6 relative overflow-hidden shadow-lg transition-all duration-300';
-                    }, 2000);
+                // --- 1. TÍNH TOÁN MỰC NƯỚC (CM) ---
+                let waterLevel = 0.0;
+                if (data.level !== undefined) {
+                    waterLevel = parseFloat(data.level);
+                } else if (data.percent !== undefined) {
+                    waterLevel = (parseFloat(data.percent) / 100.0) * 500.0;
+                } else if (data.volt !== undefined) {
+                    let vEff = Math.max(0, parseFloat(data.volt) - 0.12);
+                    waterLevel = (vEff / (3.3 - 0.12)) * 500.0;
                 }
 
-                // 1. Dữ liệu Điện áp biến trở (Volt, Percent, Raw)
-                if (data.volt !== undefined) {
-                    const voltVal = parseFloat(data.volt).toFixed(2);
-                    document.getElementById('val-volt').innerText = voltVal;
-                    // Cập nhật thanh tiến trình %
-                    const barWidth = Math.min(100, Math.max(0, (voltVal / 3.3) * 100));
-                    document.getElementById('bar-volt').style.width = barWidth + '%';
-                }
+                // Cập nhật giao diện mức nước (cm) và mét (m)
+                document.getElementById('val-level').innerText = waterLevel.toFixed(1);
+                document.getElementById('val-level-m').innerText = (waterLevel / 100.0).toFixed(2);
+
+                // --- 2. TỶ LỆ DÂNG NƯỚC (%) ---
+                let percent = 0.0;
                 if (data.percent !== undefined) {
-                    document.getElementById('val-percent').innerText = parseFloat(data.percent).toFixed(1);
+                    percent = parseFloat(data.percent);
+                } else {
+                    percent = (waterLevel / 500.0) * 100.0;
+                }
+                percent = Math.min(100, Math.max(0, percent));
+                document.getElementById('val-percent').innerText = percent.toFixed(1);
+                document.getElementById('bar-water').style.width = percent + '%';
+
+                // --- 3. ĐIỆN ÁP & RAW ADC ---
+                let voltVal = 0.0;
+                if (data.volt !== undefined) {
+                    voltVal = parseFloat(data.volt);
+                    document.getElementById('val-volt').innerText = voltVal.toFixed(2);
                 }
                 if (data.raw !== undefined) {
                     document.getElementById('val-raw').innerText = data.raw;
                 }
 
-                // Cập nhật biểu đồ (giữ tối đa 25 điểm gần nhất)
-                if (sensorChart.data.labels.length > 25) {
+                // --- 4. ÁP SUẤT THỦY TĨNH (BAR) ---
+                let pressureBar = 0.0;
+                if (data.press !== undefined) {
+                    pressureBar = parseFloat(data.press);
+                } else {
+                    // P = h (cm) / 1019.72 (1 Bar = 1019.72 cm H2O)
+                    pressureBar = waterLevel / 1019.72;
+                }
+                document.getElementById('val-pressure').innerText = pressureBar.toFixed(3);
+
+                // --- 5. ĐÁNH GIÁ MỨC ĐỘ CẢNH BÁO NGẬP LỤT ---
+                if (waterLevel >= 400.0) {
+                    alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/50 animate-pulse';
+                    alertBadge.innerText = '🚨 BÁO ĐỘNG ĐỎ: NGẬP NGUY HIỂM';
+                } else if (waterLevel >= 250.0) {
+                    alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/50';
+                    alertBadge.innerText = '⚡ CẢNH BÁO: MỨC NƯỚC CAO';
+                } else {
+                    alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+                    alertBadge.innerText = '✔ AN TOÀN / BÌNH THƯỜNG';
+                }
+
+                // --- 6. CẬP NHẬT BIỂU ĐỒ THỜI GIAN THỰC (LƯU TỐI ĐA 30 ĐIỂM) ---
+                if (sensorChart.data.labels.length > 30) {
                     sensorChart.data.labels.shift();
                     sensorChart.data.datasets[0].data.shift();
                     sensorChart.data.datasets[1].data.shift();
                 }
 
                 sensorChart.data.labels.push(timeStr);
-                sensorChart.data.datasets[0].data.push(data.volt !== undefined ? data.volt : (data.temp ?? null));
-                sensorChart.data.datasets[1].data.push(data.percent !== undefined ? data.percent : (data.hum ?? null));
+                sensorChart.data.datasets[0].data.push(waterLevel);
+                sensorChart.data.datasets[1].data.push(voltVal);
                 sensorChart.update();
 
             } catch (e) {
-                addLog(`[LỖI PARSE] Dữ liệu nhận được không phải định dạng JSON hợp lệ.`);
+                addLog(`[LỖI PARSE JSON] Gói tin không đúng cú pháp: ${e.message}`);
             }
         });
 
@@ -292,4 +353,3 @@
     </script>
 </body>
 </html>
-
