@@ -78,9 +78,7 @@ static void uart_rx_task(void *pvParameters) {
                 }
             }
         }
-      }
     }
-  }
 }
 
 esp_err_t uart_app_init(void) {

@@ -30,6 +30,11 @@ bool mqtt_app_is_connected(void);
  */
 uint32_t mqtt_app_get_pub_count(void);
 
+/**
+ * @brief Bắn bản tin trạng thái Gateway ESP32 lên MQTT topic /status
+ */
+esp_err_t mqtt_app_publish_status(const char *json_status);
+
 #ifdef __cplusplus
 }
 #endif

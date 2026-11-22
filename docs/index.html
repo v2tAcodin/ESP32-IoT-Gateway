@@ -44,6 +44,11 @@
                 <span id="water-alert-badge" class="px-3 py-1.5 text-xs font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                     ✔ AN TOÀN
                 </span>
+                <!-- Trạng thái Gateway ESP32 -->
+                <span id="gateway-status-badge" class="px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono flex items-center gap-1.5" title="Trạng thái kết nối của ESP32 Gateway">
+                    <span id="gateway-status-dot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                    <span id="gateway-status-text">ESP32: Đang dò...</span>
+                </span>
                 <span id="backend-status-badge" class="px-3 py-1.5 text-xs font-semibold rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                     Backend API: Đang kết nối...
                 </span>
@@ -754,11 +759,20 @@
                     backendBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse';
 
                     const alertBadge = document.getElementById('water-alert-badge');
-                    alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-600/30 text-rose-300 border border-rose-500 animate-pulse';
-                    alertBadge.innerText = `⚠️ MẤT DỮ LIỆU (Lần cuối nhận: ${data.last_received_str})`;
+                    const gwText = document.getElementById('gateway-status-text');
+                    const isGwOnline = gwText && gwText.innerText.includes('Online');
 
-                    document.getElementById('val-sensor-status-label').innerText = 'Mất dữ liệu!';
-                    document.getElementById('val-sensor-status-label').className = 'text-rose-400 text-xs font-bold';
+                    if (isGwOnline && packetCount === 0) {
+                        alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse';
+                        alertBadge.innerText = '⏳ CHỜ CẢM BIẾN STM32 (ESP32 ĐÃ KẾT NỐI)';
+                        document.getElementById('val-sensor-status-label').innerText = 'Chờ STM32';
+                        document.getElementById('val-sensor-status-label').className = 'text-amber-300 text-xs font-semibold';
+                    } else {
+                        alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-600/30 text-rose-300 border border-rose-500 animate-pulse';
+                        alertBadge.innerText = `⚠️ MẤT DỮ LIỆU (Lần cuối nhận: ${data.last_received_str})`;
+                        document.getElementById('val-sensor-status-label').innerText = 'Mất dữ liệu!';
+                        document.getElementById('val-sensor-status-label').className = 'text-rose-400 text-xs font-bold';
+                    }
                 } else {
                     isSystemLostData = false;
                     backendBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
@@ -809,6 +823,7 @@
             statusBadge.innerText = '● Đã kết nối';
             statusBadge.className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
             client.subscribe(currentTopic);
+            client.subscribe(currentTopic + '/status');
         });
 
         client.on('offline', () => {
@@ -818,6 +833,38 @@
 
         client.on('message', (topic, message) => {
             const rawStr = message.toString();
+
+            // 1. Nếu là bản tin trạng thái Gateway ESP32
+            if (topic === currentTopic + '/status') {
+                try {
+                    const st = JSON.parse(rawStr);
+                    const gwBadge = document.getElementById('gateway-status-badge');
+                    const gwDot = document.getElementById('gateway-status-dot');
+                    const gwText = document.getElementById('gateway-status-text');
+
+                    if (st.status === 'online') {
+                        if (gwBadge) gwBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono flex items-center gap-1.5';
+                        if (gwDot) gwDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+                        if (gwText) gwText.innerText = 'ESP32: Online';
+
+                        // Nếu chưa có mẫu nào từ cảm biến STM32, hiện thông báo rõ ràng cho người dùng
+                        if (packetCount === 0) {
+                            const alertBadge = document.getElementById('water-alert-badge');
+                            alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse';
+                            alertBadge.innerText = '⏳ CHỜ CẢM BIẾN STM32 (ESP32 ĐÃ KẾT NỐI)';
+                            document.getElementById('val-sensor-status-label').innerText = 'Chờ STM32';
+                            document.getElementById('val-sensor-status-label').className = 'text-amber-300 text-xs font-semibold';
+                        }
+                    } else if (st.status === 'offline') {
+                        if (gwBadge) gwBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono flex items-center gap-1.5';
+                        if (gwDot) gwDot.className = 'w-2 h-2 rounded-full bg-rose-500';
+                        if (gwText) gwText.innerText = 'ESP32: Offline';
+                    }
+                } catch (e) {}
+                return;
+            }
+
+            // 2. Nếu là gói tin dữ liệu cảm biến đo đạc
             const nowEpoch = Date.now();
             const timeStr = formatFullDateTimeVN(nowEpoch);
             packetCount++;
@@ -1408,8 +1455,10 @@
             const newTopic = document.getElementById('topic-input').value.trim();
             if (newTopic && newTopic !== currentTopic) {
                 client.unsubscribe(currentTopic);
+                client.unsubscribe(currentTopic + '/status');
                 currentTopic = newTopic;
                 client.subscribe(currentTopic);
+                client.subscribe(currentTopic + '/status');
                 addLog(`[SYSTEM] Đã chuyển sang topic live: ${currentTopic}`);
             }
         }

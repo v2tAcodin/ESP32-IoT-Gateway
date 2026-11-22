@@ -59,6 +59,7 @@ void app_main(void)
      * 5. VÒNG LẶP THEO DÕI HỆ THỐNG (SYSTEM HEARTBEAT)
      * In ra log định kỳ để bạn theo dõi dung lượng RAM còn lại và trạng thái kết nối.
      */
+    char status_payload[128];
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(10000)); // Lặp lại mỗi 10 giây
         ESP_LOGI(TAG, "[HEARTBEAT] Free Heap: %lu bytes | Wi-Fi: %s | MQTT: %s | Goi tin: UART_RX=%lu, MQTT_PUB=%lu",
@@ -67,6 +68,14 @@ void app_main(void)
                  mqtt_app_is_connected() ? "CONNECTED" : "DISCONNECTED",
                  (unsigned long)uart_app_get_rx_count(),
                  (unsigned long)mqtt_app_get_pub_count());
+
+        if (mqtt_app_is_connected()) {
+            snprintf(status_payload, sizeof(status_payload),
+                     "{\"gateway\":\"ESP32-C3\",\"status\":\"online\",\"uart_rx\":%lu,\"mqtt_pub\":%lu}",
+                     (unsigned long)uart_app_get_rx_count(),
+                     (unsigned long)mqtt_app_get_pub_count());
+            mqtt_app_publish_status(status_payload);
+        }
     }
 }
 
