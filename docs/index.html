@@ -183,59 +183,38 @@
 
             <!-- BỘ LỌC DỮ LIỆU ĐA TẦNG -->
             <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-700 space-y-3">
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
                     <!-- Nguồn dữ liệu -->
-                    <div>
+                    <div class="lg:col-span-3">
                         <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Nguồn Dữ Liệu</label>
-                        <select id="filter-source" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                        <select id="filter-source" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
                             <option value="REAL" selected>Dữ Liệu Thật (Mặc định)</option>
                             <option value="SIMULATED">Dữ Liệu Giả Lập (Test)</option>
                             <option value="ALL">Tất Cả (Thật + Giả lập)</option>
                         </select>
                     </div>
 
-                    <!-- Năm -->
-                    <div>
-                        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Năm</label>
-                        <select id="filter-year" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
-                            <option value="ALL">Tất Cả Năm</option>
-                            <option value="2026" selected>2026</option>
-                            <option value="2027">2027</option>
-                            <option value="2028">2028</option>
-                        </select>
-                    </div>
-
-                    <!-- Tháng -->
-                    <div>
-                        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Tháng</label>
-                        <select id="filter-month" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
-                            <option value="ALL" selected>Tất Cả Tháng</option>
-                            <option value="1">Tháng 1</option>
-                            <option value="2">Tháng 2</option>
-                            <option value="3">Tháng 3</option>
-                            <option value="4">Tháng 4</option>
-                            <option value="5">Tháng 5</option>
-                            <option value="6">Tháng 6</option>
-                            <option value="7">Tháng 7</option>
-                            <option value="8">Tháng 8</option>
-                            <option value="9">Tháng 9</option>
-                            <option value="10">Tháng 10</option>
-                            <option value="11">Tháng 11</option>
-                            <option value="12">Tháng 12</option>
-                        </select>
-                    </div>
-
-                    <!-- Chọn Ngày (Flatpickr dd/mm/yyyy) -->
-                    <div>
-                        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Chọn Ngày (dd/mm/yyyy)</label>
-                        <input type="text" id="filter-date" placeholder="Chọn ngày..." 
-                               class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-cyan-300 font-mono focus:outline-none focus:border-cyan-500">
+                    <!-- Chọn Ngày / Khoảng Ngày (Đã bao gồm Ngày, Tháng, Năm) -->
+                    <div class="lg:col-span-5">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                                Chọn Ngày / Khoảng Ngày (dd/mm/yyyy)
+                            </label>
+                            <span class="text-[10px] text-cyan-400 cursor-pointer hover:underline" onclick="clearDateFilter()">✕ Xóa ngày</span>
+                        </div>
+                        <div class="relative">
+                            <input type="text" id="filter-date" placeholder="Chọn ngày hoặc khoảng ngày (dd/mm/yyyy)..." 
+                                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-cyan-300 font-mono focus:outline-none focus:border-cyan-500 pr-9">
+                            <div class="absolute right-3 top-2.5 text-slate-400 pointer-events-none">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Khung Giờ Bắt Đầu -->
-                    <div>
+                    <div class="lg:col-span-2">
                         <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Từ Giờ</label>
-                        <select id="filter-hour-start" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+                        <select id="filter-hour-start" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
                             <option value="0" selected>00:00</option>
                             <option value="1">01:00</option>
                             <option value="2">02:00</option>
@@ -264,9 +243,9 @@
                     </div>
 
                     <!-- Khung Giờ Kết Thúc -->
-                    <div>
+                    <div class="lg:col-span-2">
                         <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Đến Giờ</label>
-                        <select id="filter-hour-end" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+                        <select id="filter-hour-end" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
                             <option value="0">00:59</option>
                             <option value="1">01:59</option>
                             <option value="2">02:59</option>
@@ -293,6 +272,15 @@
                             <option value="23" selected>23:59</option>
                         </select>
                     </div>
+                </div>
+
+                <!-- Thanh chọn nhanh thời gian tiện lợi -->
+                <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/80">
+                    <span class="text-[11px] text-slate-400">Chọn nhanh:</span>
+                    <button type="button" onclick="setQuickDate('today')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-[11px] transition">Hôm nay</button>
+                    <button type="button" onclick="setQuickDate('yesterday')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] transition">Hôm qua</button>
+                    <button type="button" onclick="setQuickDate('this_month')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] transition">Tháng này</button>
+                    <button type="button" onclick="setQuickDate('all')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] transition">Tất cả thời gian</button>
                 </div>
 
                 <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
@@ -656,6 +644,7 @@
         let sortDirection = 'desc';
 
         let historyChartInstance = null;
+        let flatpickrInstance = null;
 
         function formatFullDateTimeVN(epochMs) {
             if (!epochMs || isNaN(epochMs)) return '--/--/---- --:--:--';
@@ -870,43 +859,128 @@
         // =====================================================================
         // 5. TRUY VẤN DỮ LIỆU TỪ BACKEND API (BẢNG, THỐNG KÊ, BIỂU ĐỒ)
         // =====================================================================
+        function getDateRangeFromInput(val, hourStart, hourEnd) {
+            if (!val || !val.trim()) {
+                return { from_ts: null, to_ts: null };
+            }
+
+            const trimmed = val.trim();
+            let parts = [];
+            if (trimmed.includes(' đến ')) {
+                parts = trimmed.split(' đến ');
+            } else if (trimmed.includes(' to ')) {
+                parts = trimmed.split(' to ');
+            } else if (trimmed.includes(' - ')) {
+                parts = trimmed.split(' - ');
+            } else {
+                parts = [trimmed];
+            }
+
+            function parseDate(str) {
+                if (!str) return null;
+                const dparts = str.trim().split('/');
+                if (dparts.length === 3) {
+                    const day = parseInt(dparts[0], 10);
+                    const month = parseInt(dparts[1], 10) - 1;
+                    const year = parseInt(dparts[2], 10);
+                    if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                        return { day, month, year };
+                    }
+                }
+                return null;
+            }
+
+            if (parts.length >= 2) {
+                const startObj = parseDate(parts[0]);
+                const endObj = parseDate(parts[1]) || startObj;
+                if (startObj && endObj) {
+                    const dStart = new Date(startObj.year, startObj.month, startObj.day, hourStart, 0, 0, 0);
+                    const dEnd = new Date(endObj.year, endObj.month, endObj.day, hourEnd, 59, 59, 999);
+                    return { from_ts: dStart.getTime(), to_ts: dEnd.getTime() };
+                }
+            } else if (parts.length === 1) {
+                const dateObj = parseDate(parts[0]);
+                if (dateObj) {
+                    const dStart = new Date(dateObj.year, dateObj.month, dateObj.day, hourStart, 0, 0, 0);
+                    const dEnd = new Date(dateObj.year, dateObj.month, dateObj.day, hourEnd, 59, 59, 999);
+                    return { from_ts: dStart.getTime(), to_ts: dEnd.getTime() };
+                }
+            }
+
+            return { from_ts: null, to_ts: null };
+        }
+
+        function clearDateFilter() {
+            if (flatpickrInstance) {
+                flatpickrInstance.clear();
+            } else {
+                document.getElementById('filter-date').value = '';
+            }
+            currentPage = 1;
+            applyFilter();
+        }
+
+        function setQuickDate(type) {
+            const pad = (n) => String(n).padStart(2, '0');
+            const fmt = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+            const now = new Date();
+
+            document.getElementById('filter-hour-start').value = '0';
+            document.getElementById('filter-hour-end').value = '23';
+
+            if (type === 'today') {
+                if (flatpickrInstance) {
+                    flatpickrInstance.setDate([now, now], false);
+                } else {
+                    document.getElementById('filter-date').value = fmt(now);
+                }
+            } else if (type === 'yesterday') {
+                const yesterday = new Date(now);
+                yesterday.setDate(now.getDate() - 1);
+                if (flatpickrInstance) {
+                    flatpickrInstance.setDate([yesterday, yesterday], false);
+                } else {
+                    document.getElementById('filter-date').value = fmt(yesterday);
+                }
+            } else if (type === 'this_month') {
+                const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+                const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                if (flatpickrInstance) {
+                    flatpickrInstance.setDate([firstDay, lastDay], false);
+                } else {
+                    document.getElementById('filter-date').value = `${fmt(firstDay)} đến ${fmt(lastDay)}`;
+                }
+            } else if (type === 'all') {
+                if (flatpickrInstance) {
+                    flatpickrInstance.clear();
+                } else {
+                    document.getElementById('filter-date').value = '';
+                }
+            }
+
+            currentPage = 1;
+            applyFilter();
+        }
+
         async function applyFilter() {
             const selSource = document.getElementById('filter-source').value;
-            const selYear = document.getElementById('filter-year').value;
-            const selMonth = document.getElementById('filter-month').value;
             const selDateStr = document.getElementById('filter-date').value.trim();
-            const hourStart = parseInt(document.getElementById('filter-hour-start').value);
-            const hourEnd = parseInt(document.getElementById('filter-hour-end').value);
+            const hourStart = parseInt(document.getElementById('filter-hour-start').value, 10);
+            const hourEnd = parseInt(document.getElementById('filter-hour-end').value, 10);
 
             let includeSim = (selSource === 'ALL' || selSource === 'SIMULATED') ? 1 : 0;
 
             // Tính toán khoảng thời gian from_ts, to_ts (UTC ms)
-            let from_ts = null;
-            let to_ts = null;
-
-            if (selDateStr) {
-                const parts = selDateStr.split('/');
-                if (parts.length === 3) {
-                    const day = parseInt(parts[0]);
-                    const month = parseInt(parts[1]) - 1;
-                    const year = parseInt(parts[2]);
-                    const dStart = new Date(year, month, day, hourStart, 0, 0);
-                    const dEnd = new Date(year, month, day, hourEnd, 59, 59);
-                    from_ts = dStart.getTime();
-                    to_ts = dEnd.getTime();
-                }
-            } else if (selYear !== 'ALL' || selMonth !== 'ALL') {
-                const year = selYear !== 'ALL' ? parseInt(selYear) : new Date().getFullYear();
-                const mStart = selMonth !== 'ALL' ? parseInt(selMonth) - 1 : 0;
-                const mEnd = selMonth !== 'ALL' ? parseInt(selMonth) - 1 : 11;
-                from_ts = new Date(year, mStart, 1, 0, 0, 0).getTime();
-                to_ts = new Date(year, mEnd + 1, 0, 23, 59, 59).getTime();
-            }
+            const { from_ts, to_ts } = getDateRangeFromInput(selDateStr, hourStart, hourEnd);
 
             const queryParams = new URLSearchParams();
             if (from_ts) queryParams.append('from', from_ts);
             if (to_ts) queryParams.append('to', to_ts);
             queryParams.append('include_simulated', includeSim);
+
+            const sourceLabel = selSource === 'REAL' ? 'Nguồn: Dữ liệu thật' : (selSource === 'SIMULATED' ? 'Nguồn: Dữ liệu giả lập' : 'Nguồn: Tất cả dữ liệu');
+            const statSourceEl = document.getElementById('stat-source-info');
+            if (statSourceEl) statSourceEl.innerText = sourceLabel;
 
             // 1. Gọi API /api/stats để nạp thẻ thống kê
             try {
@@ -967,9 +1041,11 @@
 
         function resetFilter() {
             document.getElementById('filter-source').value = 'REAL';
-            document.getElementById('filter-year').value = 'ALL';
-            document.getElementById('filter-month').value = 'ALL';
-            document.getElementById('filter-date').value = '';
+            if (flatpickrInstance) {
+                flatpickrInstance.clear();
+            } else {
+                document.getElementById('filter-date').value = '';
+            }
             document.getElementById('filter-hour-start').value = '0';
             document.getElementById('filter-hour-end').value = '23';
             currentPage = 1;
@@ -1099,15 +1175,35 @@
         // =====================================================================
         function exportToExcel() {
             const selSource = document.getElementById('filter-source').value;
+            const selDateStr = document.getElementById('filter-date').value.trim();
+            const hourStart = parseInt(document.getElementById('filter-hour-start').value, 10);
+            const hourEnd = parseInt(document.getElementById('filter-hour-end').value, 10);
+            const { from_ts, to_ts } = getDateRangeFromInput(selDateStr, hourStart, hourEnd);
+
             const incSim = (selSource === 'ALL' || selSource === 'SIMULATED') ? 1 : 0;
-            window.location.href = `${API_BASE_URL}/api/export.xlsx?include_simulated=${incSim}`;
+            const params = new URLSearchParams();
+            params.append('include_simulated', incSim);
+            if (from_ts) params.append('from', from_ts);
+            if (to_ts) params.append('to', to_ts);
+
+            window.location.href = `${API_BASE_URL}/api/export.xlsx?${params.toString()}`;
             addLog('[EXCEL] Đã kích hoạt tải về file Báo Cáo Mực Nước Thủy Văn (.xlsx) từ Backend');
         }
 
         function exportToCSV() {
             const selSource = document.getElementById('filter-source').value;
+            const selDateStr = document.getElementById('filter-date').value.trim();
+            const hourStart = parseInt(document.getElementById('filter-hour-start').value, 10);
+            const hourEnd = parseInt(document.getElementById('filter-hour-end').value, 10);
+            const { from_ts, to_ts } = getDateRangeFromInput(selDateStr, hourStart, hourEnd);
+
             const incSim = (selSource === 'ALL' || selSource === 'SIMULATED') ? 1 : 0;
-            window.location.href = `${API_BASE_URL}/api/export.csv?include_simulated=${incSim}`;
+            const params = new URLSearchParams();
+            params.append('include_simulated', incSim);
+            if (from_ts) params.append('from', from_ts);
+            if (to_ts) params.append('to', to_ts);
+
+            window.location.href = `${API_BASE_URL}/api/export.csv?${params.toString()}`;
             addLog('[CSV] Đã kích hoạt tải về file CSV UTF-8 BOM từ Backend');
         }
 
@@ -1430,12 +1526,25 @@
         });
 
         window.addEventListener('DOMContentLoaded', () => {
-            flatpickr("#filter-date", {
+            flatpickrInstance = flatpickr("#filter-date", {
+                mode: "range",
+                conjunction: " đến ",
                 dateFormat: "d/m/Y",
                 locale: "vn",
                 allowInput: true,
-                onChange: () => applyFilter()
+                onClose: () => {
+                    applyFilter();
+                }
             });
+
+            const dateInput = document.getElementById('filter-date');
+            if (dateInput) {
+                dateInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        applyFilter();
+                    }
+                });
+            }
 
             updateThresholdLabels();
             checkBackendStatus();

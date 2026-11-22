@@ -729,14 +729,26 @@ def download_backup_file(filename):
 def export_csv():
     """Xuất CSV kèm UTF-8 BOM để Excel đọc đúng tiếng Việt không bị lỗi font"""
     include_sim = request.args.get('include_simulated', default=0, type=int)
+    from_ts = request.args.get('from', type=int)
+    to_ts = request.args.get('to', type=int)
+
+    conditions = ["1=1"]
+    params = []
+    if not include_sim:
+        conditions.append("is_simulated = 0")
+    if from_ts is not None:
+        conditions.append("received_at >= ?")
+        params.append(from_ts)
+    if to_ts is not None:
+        conditions.append("received_at <= ?")
+        params.append(to_ts)
+
+    where_clause = " WHERE " + " AND ".join(conditions)
 
     with g_db_lock:
         conn = get_db_connection()
-        query = "SELECT * FROM measurements"
-        if not include_sim:
-            query += " WHERE is_simulated = 0"
-        query += " ORDER BY received_at ASC"
-        df = pd.read_sql_query(query, conn)
+        query = f"SELECT * FROM measurements{where_clause} ORDER BY received_at ASC"
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
 
     if df.empty:
@@ -789,14 +801,26 @@ def export_csv():
 def export_excel():
     """Xuất file Excel chuẩn nghiên cứu gồm 3 Sheet: Dữ liệu chi tiết, Tổng hợp theo Giờ, Tổng hợp theo Ngày"""
     include_sim = request.args.get('include_simulated', default=0, type=int)
+    from_ts = request.args.get('from', type=int)
+    to_ts = request.args.get('to', type=int)
+
+    conditions = ["1=1"]
+    params = []
+    if not include_sim:
+        conditions.append("is_simulated = 0")
+    if from_ts is not None:
+        conditions.append("received_at >= ?")
+        params.append(from_ts)
+    if to_ts is not None:
+        conditions.append("received_at <= ?")
+        params.append(to_ts)
+
+    where_clause = " WHERE " + " AND ".join(conditions)
 
     with g_db_lock:
         conn = get_db_connection()
-        query = "SELECT * FROM measurements"
-        if not include_sim:
-            query += " WHERE is_simulated = 0"
-        query += " ORDER BY received_at ASC"
-        df_raw = pd.read_sql_query(query, conn)
+        query = f"SELECT * FROM measurements{where_clause} ORDER BY received_at ASC"
+        df_raw = pd.read_sql_query(query, conn, params=params)
         conn.close()
 
     excel_buffer = io.BytesIO()
