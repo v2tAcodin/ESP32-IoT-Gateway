@@ -10,6 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- MQTT.js chạy trực tiếp trên trình duyệt qua WebSocket Secure -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <!-- SheetJS để xuất Excel .xlsx trực tiếp trên trình duyệt -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-6 font-sans">
     <div class="max-w-6xl mx-auto space-y-6">
@@ -20,11 +22,11 @@
                 <div class="flex items-center gap-3">
                     <span class="inline-block w-3.5 h-3.5 rounded-full bg-cyan-400 animate-pulse"></span>
                     <h1 class="text-xl md:text-2xl font-bold text-white tracking-wide">
-                        HỆ THỐNG GIÁM SÁT MỰC NƯỚC & CẢNH BÁO NGẬP LỤT IOT
+                        HỆ THỐNG GIÁM SÁT MỰC NƯỚC & LƯỢNG MƯA IOT
                     </h1>
                 </div>
                 <p class="text-xs md:text-sm text-slate-400 mt-1">
-                    Cảm biến áp suất thủy tĩnh chìm (STM32F103) ➜ ESP32-C3 Gateway ➜ Cloud Broker (MQTT over WSS)
+                    Cảm biến áp suất thủy tĩnh chìm (STM32F103) ➜ ESP32-C3 Gateway ➜ Cloud Broker ➜ CSDL Excel Nghiên Cứu
                 </p>
             </div>
             <div class="flex flex-wrap items-center gap-3">
@@ -52,13 +54,13 @@
             </button>
         </section>
 
-        <!-- VALUE CARDS (THẺ THÔNG SỐ MỰC NƯỚC) -->
+        <!-- VALUE CARDS (THẺ THÔNG SỐ MỰC NƯỚC / LƯỢNG MƯA) -->
         <section class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
-            <!-- THẺ 1: MỰC NƯỚC HIỆN TẠI (CM) -->
+            <!-- THẺ 1: MỰC NƯỚC HIỆN TẠI (CM & MM) -->
             <div class="bg-slate-800 border-2 border-cyan-500/40 rounded-2xl p-5 relative overflow-hidden shadow-lg bg-gradient-to-br from-slate-800 to-cyan-950/20">
                 <div class="text-xs uppercase tracking-wider font-bold text-cyan-400 mb-2 flex items-center gap-1.5">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
-                    Mực Nước Hiện Tại
+                    Mực Nước / Chiều Cao Cột Nước
                 </div>
                 <div class="flex items-baseline gap-2">
                     <span id="val-level" class="text-4xl font-black text-cyan-300">0.0</span>
@@ -69,8 +71,8 @@
                     <div id="bar-water" class="bg-gradient-to-r from-cyan-500 to-blue-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
                 <div class="mt-2 text-xs text-slate-400 flex justify-between">
-                    <span>Quy đổi: <strong id="val-level-m" class="text-slate-300">0.00</strong> m</span>
-                    <span class="text-slate-500">Max: 500 cm</span>
+                    <span>Quy đổi: <strong id="val-rain-mm" class="text-cyan-300">0.0</strong> mm</span>
+                    <span>(<strong id="val-level-m" class="text-slate-300">0.00</strong> m)</span>
                 </div>
             </div>
 
@@ -82,7 +84,7 @@
                     <span class="text-xl font-bold text-slate-500">%</span>
                 </div>
                 <div class="mt-4 text-xs text-slate-400">
-                    Thang đo danh định: <strong class="text-slate-300">0 - 5.0 mét</strong>
+                    Thang đo danh định: <strong class="text-slate-300">0 - 500 cm (5.0m)</strong>
                 </div>
             </div>
 
@@ -107,7 +109,7 @@
                     <span class="text-xl font-bold text-slate-500">gói</span>
                 </div>
                 <div class="mt-4 text-xs text-slate-400 flex justify-between items-center">
-                    <span>Chu kỳ: ~300ms/lần</span>
+                    <span>CSDL Trình duyệt: <strong id="val-db-count" class="text-emerald-400 font-bold">0</strong> bản ghi</span>
                     <span class="text-emerald-400 text-xs font-mono">QoS 0</span>
                 </div>
             </div>
@@ -118,7 +120,7 @@
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
                 <h2 class="text-lg font-bold text-white flex items-center gap-2">
                     <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
-                    Đồ Thị Mực Nước Theo Thời Gian Thực
+                    Đồ Thị Mực Nước & Lượng Mưa Theo Thời Gian Thực
                 </h2>
                 <span class="text-xs text-slate-400 bg-slate-900/80 px-3 py-1 rounded-full border border-slate-700">
                     Giữ 30 điểm đo gần nhất
@@ -126,6 +128,239 @@
             </div>
             <div class="h-80 w-full">
                 <canvas id="sensorChart"></canvas>
+            </div>
+        </section>
+
+        <!-- ===================================================================== -->
+        <!-- KHU VỰC QUẢN LÝ CƠ SỞ DỮ LIỆU & BỘ LỌC XUẤT EXCEL NGHIÊN CỨU           -->
+        <!-- ===================================================================== -->
+        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center pb-4 border-b border-slate-700 gap-3">
+                <div>
+                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                        <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Cơ Sở Dữ Liệu Nghiên Cứu & Trích Xuất Excel
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">
+                        Dữ liệu được lưu trữ trực tiếp vào CSDL cục bộ (IndexedDB). Hỗ trợ tra cứu theo từng Giờ, Ngày, Tháng, Năm và xuất file Excel (.xlsx) chuẩn hóa nhiều Sheet.
+                    </p>
+                </div>
+                
+                <!-- Cấu hình lưu trữ -->
+                <div class="flex flex-wrap items-center gap-3 text-xs bg-slate-900/80 p-2.5 rounded-xl border border-slate-700">
+                    <label class="flex items-center gap-2 cursor-pointer text-slate-300 font-medium">
+                        <input type="checkbox" id="auto-save-toggle" checked class="w-4 h-4 text-emerald-500 rounded bg-slate-800 border-slate-600 focus:ring-emerald-500">
+                        <span>Tự động lưu CSDL</span>
+                    </label>
+                    <span class="text-slate-600">|</span>
+                    <label class="flex items-center gap-1.5 text-slate-300">
+                        <span>Chu kỳ lưu:</span>
+                        <select id="log-interval" class="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-cyan-400 focus:outline-none">
+                            <option value="0">Tất cả gói (~300ms)</option>
+                            <option value="1000">1 giây / mẫu</option>
+                            <option value="2000" selected>2 giây / mẫu (Khuyên dùng)</option>
+                            <option value="5000">5 giây / mẫu</option>
+                            <option value="10000">10 giây / mẫu</option>
+                            <option value="60000">1 phút / mẫu</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+
+            <!-- BỘ LỌC TRUY VẤN THEO NGÀY / NĂM / GIỜ -->
+            <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/60 space-y-4">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                    Bộ Lọc Truy Vấn Số Liệu Nghiên Cứu
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                    <!-- Lọc Năm -->
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Năm:</label>
+                        <select id="filter-year" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="ALL">-- Tất cả các năm --</option>
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                            <option value="2026" selected>2026</option>
+                            <option value="2027">2027</option>
+                        </select>
+                    </div>
+
+                    <!-- Lọc Tháng -->
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Tháng:</label>
+                        <select id="filter-month" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="ALL" selected>-- Tất cả các tháng --</option>
+                            <option value="1">Tháng 1</option>
+                            <option value="2">Tháng 2</option>
+                            <option value="3">Tháng 3</option>
+                            <option value="4">Tháng 4</option>
+                            <option value="5">Tháng 5</option>
+                            <option value="6">Tháng 6</option>
+                            <option value="7">Tháng 7</option>
+                            <option value="8">Tháng 8</option>
+                            <option value="9">Tháng 9</option>
+                            <option value="10">Tháng 10</option>
+                            <option value="11">Tháng 11</option>
+                            <option value="12">Tháng 12</option>
+                        </select>
+                    </div>
+
+                    <!-- Lọc Ngày cụ thể -->
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Ngày (Tùy chọn):</label>
+                        <input type="date" id="filter-date" 
+                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                    </div>
+
+                    <!-- Lọc Giờ Bắt Đầu -->
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Từ Giờ:</label>
+                        <select id="filter-hour-start" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="0" selected>00:00 (Đầu ngày)</option>
+                            <option value="1">01:00</option>
+                            <option value="2">02:00</option>
+                            <option value="3">03:00</option>
+                            <option value="4">04:00</option>
+                            <option value="5">05:00</option>
+                            <option value="6">06:00</option>
+                            <option value="7">07:00</option>
+                            <option value="8">08:00</option>
+                            <option value="9">09:00</option>
+                            <option value="10">10:00</option>
+                            <option value="11">11:00</option>
+                            <option value="12">12:00</option>
+                            <option value="13">13:00</option>
+                            <option value="14">14:00</option>
+                            <option value="15">15:00</option>
+                            <option value="16">16:00</option>
+                            <option value="17">17:00</option>
+                            <option value="18">18:00</option>
+                            <option value="19">19:00</option>
+                            <option value="20">20:00</option>
+                            <option value="21">21:00</option>
+                            <option value="22">22:00</option>
+                            <option value="23">23:00</option>
+                        </select>
+                    </div>
+
+                    <!-- Lọc Giờ Kết Thúc -->
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Đến Giờ:</label>
+                        <select id="filter-hour-end" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="23" selected>23:59 (Cuối ngày)</option>
+                            <option value="0">00:59</option>
+                            <option value="1">01:59</option>
+                            <option value="2">02:59</option>
+                            <option value="3">03:59</option>
+                            <option value="4">04:59</option>
+                            <option value="5">05:59</option>
+                            <option value="6">06:59</option>
+                            <option value="7">07:59</option>
+                            <option value="8">08:59</option>
+                            <option value="9">09:59</option>
+                            <option value="10">10:59</option>
+                            <option value="11">11:59</option>
+                            <option value="12">12:59</option>
+                            <option value="13">13:59</option>
+                            <option value="14">14:59</option>
+                            <option value="15">15:59</option>
+                            <option value="16">16:59</option>
+                            <option value="17">17:59</option>
+                            <option value="18">18:59</option>
+                            <option value="19">19:59</option>
+                            <option value="20">20:59</option>
+                            <option value="21">21:59</option>
+                            <option value="22">22:59</option>
+                            <option value="23">23:59</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+                    <div class="flex items-center gap-2">
+                        <button onclick="applyFilter()" class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-4 py-2 rounded-lg font-medium transition shadow flex items-center gap-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            Tra Cứu / Lọc Dữ Liệu
+                        </button>
+                        <button onclick="resetFilter()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-3 py-2 rounded-lg font-medium transition border border-slate-600">
+                            Đặt Lại
+                        </button>
+                    </div>
+
+                    <!-- Các nút Xuất Excel & Thao Tác -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-lg font-bold transition shadow-lg flex items-center gap-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            📗 Xuất Báo Cáo Excel (.xlsx)
+                        </button>
+                        <button onclick="exportToCSV()" class="bg-teal-700 hover:bg-teal-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition">
+                            📄 Xuất CSV
+                        </button>
+                        <button onclick="generateSampleData()" class="bg-indigo-700/70 hover:bg-indigo-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition" title="Tạo 50 mẫu thử ngẫu nhiên để kiểm tra bộ lọc">
+                            🧪 Thử nghiệm (+50 mẫu)
+                        </button>
+                        <button onclick="clearDatabase()" class="bg-rose-900/60 hover:bg-rose-800 text-rose-300 text-xs px-3 py-2 rounded-lg font-medium transition border border-rose-700/50">
+                            🗑️ Xóa CSDL
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- THẺ THỐNG KÊ NHANH CỦA DỮ LIỆU ĐANG LỌC -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700">
+                    <div class="text-[11px] text-slate-400 font-medium">Số Mẫu Thỏa Điểm Lọc</div>
+                    <div class="text-2xl font-bold text-white mt-1" id="stat-count">0</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">mẫu ghi nhận</div>
+                </div>
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700">
+                    <div class="text-[11px] text-slate-400 font-medium">Lượng Nước Trung Bình</div>
+                    <div class="text-2xl font-bold text-cyan-400 mt-1" id="stat-avg">0.0 <span class="text-xs font-normal">cm</span></div>
+                    <div class="text-[11px] text-slate-500 mt-0.5" id="stat-avg-mm">0.0 mm</div>
+                </div>
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700">
+                    <div class="text-[11px] text-slate-400 font-medium">Đỉnh Mực Nước Cao Nhất (Max)</div>
+                    <div class="text-2xl font-bold text-amber-400 mt-1" id="stat-max">0.0 <span class="text-xs font-normal">cm</span></div>
+                    <div class="text-[11px] text-slate-500 mt-0.5" id="stat-max-time">Thời điểm: --:--</div>
+                </div>
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700">
+                    <div class="text-[11px] text-slate-400 font-medium">Mực Nước Thấp Nhất (Min)</div>
+                    <div class="text-2xl font-bold text-emerald-400 mt-1" id="stat-min">0.0 <span class="text-xs font-normal">cm</span></div>
+                    <div class="text-[11px] text-slate-500 mt-0.5" id="stat-min-time">Thời điểm: --:--</div>
+                </div>
+            </div>
+
+            <!-- BẢNG XEM TRƯỚC SỐ LIỆU ĐANG LỌC (DATA TABLE PREVIEW) -->
+            <div class="overflow-x-auto rounded-xl border border-slate-700 bg-slate-950/60">
+                <table class="w-full text-left text-xs text-slate-300">
+                    <thead class="bg-slate-800/90 text-slate-400 uppercase tracking-wider text-[11px] border-b border-slate-700 font-semibold">
+                        <tr>
+                            <th class="px-4 py-3">STT</th>
+                            <th class="px-4 py-3">Thời gian ghi nhận</th>
+                            <th class="px-4 py-3 text-right">Mực nước (cm)</th>
+                            <th class="px-4 py-3 text-right">Lượng mưa quy đổi (mm)</th>
+                            <th class="px-4 py-3 text-right">Điện áp (V)</th>
+                            <th class="px-4 py-3 text-right">Áp suất (Bar)</th>
+                            <th class="px-4 py-3 text-center">Tỷ lệ (%)</th>
+                            <th class="px-4 py-3 text-center">Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody id="preview-tbody" class="divide-y divide-slate-800">
+                        <tr>
+                            <td colspan="8" class="text-center py-6 text-slate-500">
+                                Chưa có dữ liệu hoặc chưa thực hiện thao tác lọc. Nhận dữ liệu tự động hoặc bấm "Thử nghiệm" để tạo mẫu test!
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex justify-between items-center text-xs text-slate-400">
+                <span id="preview-showing-label">Hiển thị tối đa 15 dòng mẫu mới nhất (file Excel sẽ xuất toàn bộ bản ghi lọc).</span>
+                <span class="text-emerald-400 font-medium">✓ Định dạng file: Microsoft Excel OpenXML (.xlsx)</span>
             </div>
         </section>
 
@@ -138,19 +373,85 @@
                 </h3>
                 <button onclick="clearLogs()" class="text-xs text-slate-400 hover:text-rose-400 transition bg-slate-900 px-2.5 py-1 rounded border border-slate-700">Xóa Nhật Ký</button>
             </div>
-            <div id="log-console" class="bg-slate-950 font-mono text-xs text-emerald-400 p-4 rounded-xl h-44 overflow-y-auto space-y-1 border border-slate-800">
+            <div id="log-console" class="bg-slate-950 font-mono text-xs text-emerald-400 p-4 rounded-xl h-36 overflow-y-auto space-y-1 border border-slate-800">
                 <div class="text-slate-500">// Đang chờ dữ liệu từ ESP32-C3...</div>
             </div>
         </section>
 
     </div>
 
-    <!-- SCRIPT XỬ LÝ MQTT & VẼ ĐỒ THỊ -->
+    <!-- SCRIPT XỬ LÝ TOÀN BỘ LOGIC: MQTT + CSDL INDEXEDDB + CHART + EXCEL EXPORT -->
     <script>
         let packetCount = 0;
+        let lastSavedTime = 0;
         let currentTopic = document.getElementById('topic-input').value;
+        let filteredRecordsCache = [];
 
-        // 1. CẤU HÌNH VÀ KHỞI TẠO ĐỒ THỊ CHART.JS
+        // =====================================================================
+        // 1. KHỞI TẠO CƠ SỞ DỮ LIỆU CỤC BỘ (INDEXEDDB - RAINFALL_DB)
+        // =====================================================================
+        const DB_NAME = 'RainfallWaterDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'measurements';
+        let dbInstance = null;
+
+        function initDatabase() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                        store.createIndex('year', 'year', { unique: false });
+                        store.createIndex('month', 'month', { unique: false });
+                        store.createIndex('day', 'day', { unique: false });
+                        store.createIndex('hour', 'hour', { unique: false });
+                        store.createIndex('date', 'date', { unique: false });
+                    }
+                };
+
+                request.onsuccess = (e) => {
+                    dbInstance = e.target.result;
+                    updateDbCountDisplay();
+                    applyFilter(); // Tải bảng dữ liệu ban đầu
+                    resolve(dbInstance);
+                };
+
+                request.onerror = (e) => {
+                    console.error('Lỗi khởi tạo IndexedDB:', e);
+                    reject(e);
+                };
+            });
+        }
+
+        // Lưu bản ghi đo mới vào IndexedDB
+        function saveRecordToDB(record) {
+            if (!dbInstance) return;
+            const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            store.add(record);
+            tx.oncomplete = () => {
+                updateDbCountDisplay();
+            };
+        }
+
+        // Đếm tổng số bản ghi trong CSDL
+        function updateDbCountDisplay() {
+            if (!dbInstance) return;
+            const tx = dbInstance.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const countReq = store.count();
+            countReq.onsuccess = () => {
+                const count = countReq.result;
+                document.getElementById('val-db-count').innerText = count.toLocaleString();
+            };
+        }
+
+        // =====================================================================
+        // 2. KHỞI TẠO ĐỒ THỊ CHART.JS
+        // =====================================================================
         const ctx = document.getElementById('sensorChart').getContext('2d');
         const sensorChart = new Chart(ctx, {
             type: 'line',
@@ -159,7 +460,7 @@
                 datasets: [
                     {
                         label: 'Mực nước (cm)',
-                        borderColor: '#06b6d4', // cyan-500
+                        borderColor: '#06b6d4',
                         backgroundColor: 'rgba(6, 182, 212, 0.15)',
                         fill: true,
                         data: [],
@@ -169,7 +470,7 @@
                     },
                     {
                         label: 'Điện áp cảm biến (V)',
-                        borderColor: '#10b981', // emerald-500
+                        borderColor: '#10b981',
                         backgroundColor: 'transparent',
                         data: [],
                         borderWidth: 2,
@@ -196,7 +497,7 @@
                         display: true,
                         position: 'left',
                         min: 0,
-                        suggestedMax: 100, // Tự co giãn linh hoạt nếu mực nước cao hơn
+                        suggestedMax: 100,
                         title: { display: true, text: 'Mực nước (cm)', color: '#06b6d4', font: { weight: 'bold' } },
                         ticks: { color: '#06b6d4' },
                         grid: { color: '#334155' }
@@ -218,7 +519,9 @@
             }
         });
 
-        // 2. KẾT NỐI TỚI HIVEMQ QUA WEBSOCKET SECURE (WSS PORT 8884)
+        // =====================================================================
+        // 3. KẾT NỐI TỚI HIVEMQ QUA WEBSOCKET SECURE (WSS PORT 8884)
+        // =====================================================================
         const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
             clientId: 'water_monitor_' + Math.random().toString(16).substr(2, 8)
         });
@@ -241,10 +544,13 @@
             statusBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30';
         });
 
-        // 3. LẮNG NGHE VÀ GIẢI MÃ BẢN TIN JSON TỪ ESP32-C3
+        // =====================================================================
+        // 4. LẮNG NGHE & XỬ LÝ GÓI TIN JSON TỪ ESP32-C3
+        // =====================================================================
         client.on('message', (topic, message) => {
             const rawStr = message.toString();
-            const timeStr = new Date().toLocaleTimeString();
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
             document.getElementById('last-update').innerText = 'Cập nhật: ' + timeStr;
 
             packetCount++;
@@ -261,12 +567,13 @@
                 } else if (data.percent !== undefined) {
                     waterLevel = (parseFloat(data.percent) / 100.0) * 500.0;
                 } else if (data.volt !== undefined) {
-                    let vEff = Math.max(0, parseFloat(data.volt) - 0.12);
-                    waterLevel = (vEff / (3.3 - 0.12)) * 500.0;
+                    let vEff = Math.max(0, parseFloat(data.volt) - 0.10);
+                    waterLevel = (vEff / (3.3 - 0.10)) * 500.0;
                 }
 
-                // Cập nhật giao diện mức nước (cm) và mét (m)
+                // Cập nhật giao diện mức nước (cm) và lượng mưa quy đổi (mm)
                 document.getElementById('val-level').innerText = waterLevel.toFixed(1);
+                document.getElementById('val-rain-mm').innerText = (waterLevel * 10.0).toFixed(1);
                 document.getElementById('val-level-m').innerText = (waterLevel / 100.0).toFixed(2);
 
                 // --- 2. TỶ LỆ DÂNG NƯỚC (%) ---
@@ -286,21 +593,19 @@
                     voltVal = parseFloat(data.volt);
                     document.getElementById('val-volt').innerText = voltVal.toFixed(2);
                 }
-                if (data.raw !== undefined) {
-                    document.getElementById('val-raw').innerText = data.raw;
-                }
+                let rawVal = data.raw !== undefined ? parseInt(data.raw) : 0;
+                document.getElementById('val-raw').innerText = rawVal;
 
                 // --- 4. ÁP SUẤT THỦY TĨNH (BAR) ---
                 let pressureBar = 0.0;
                 if (data.press !== undefined) {
                     pressureBar = parseFloat(data.press);
                 } else {
-                    // P = h (cm) / 1019.72 (1 Bar = 1019.72 cm H2O)
                     pressureBar = waterLevel / 1019.72;
                 }
                 document.getElementById('val-pressure').innerText = pressureBar.toFixed(3);
 
-                // --- 5. ĐÁNH GIÁ MỨC ĐỘ CẢNH BÁO NGẬP LỤT ---
+                // --- 5. ĐÁNH GIÁ MỨC ĐỘ CẢNH BÁO ---
                 if (waterLevel >= 400.0) {
                     alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/50 animate-pulse';
                     alertBadge.innerText = '🚨 BÁO ĐỘNG ĐỎ: NGẬP NGUY HIỂM';
@@ -312,22 +617,391 @@
                     alertBadge.innerText = '✔ AN TOÀN / BÌNH THƯỜNG';
                 }
 
-                // --- 6. CẬP NHẬT BIỂU ĐỒ THỜI GIAN THỰC (LƯU TỐI ĐA 30 ĐIỂM) ---
+                // --- 6. CẬP NHẬT BIỂU ĐỒ THỜI GIAN THỰC (GIỮ 30 ĐIỂM) ---
                 if (sensorChart.data.labels.length > 30) {
                     sensorChart.data.labels.shift();
                     sensorChart.data.datasets[0].data.shift();
                     sensorChart.data.datasets[1].data.shift();
                 }
-
                 sensorChart.data.labels.push(timeStr);
                 sensorChart.data.datasets[0].data.push(waterLevel);
                 sensorChart.data.datasets[1].data.push(voltVal);
                 sensorChart.update();
 
+                // --- 7. TỰ ĐỘNG LƯU VÀO CƠ SỞ DỮ LIỆU INDEXEDDB ---
+                const autoSaveEnabled = document.getElementById('auto-save-toggle').checked;
+                const intervalLimit = parseInt(document.getElementById('log-interval').value);
+                const currentTimeMs = Date.now();
+
+                if (autoSaveEnabled && (currentTimeMs - lastSavedTime >= intervalLimit)) {
+                    lastSavedTime = currentTimeMs;
+
+                    const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+                    const record = {
+                        timestamp: now.toISOString(),
+                        datetime_str: now.getFullYear() + '-' + 
+                                      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                                      String(now.getDate()).padStart(2, '0') + ' ' + 
+                                      String(now.getHours()).padStart(2, '0') + ':' + 
+                                      String(now.getMinutes()).padStart(2, '0') + ':' + 
+                                      String(now.getSeconds()).padStart(2, '0'),
+                        year: now.getFullYear(),
+                        month: now.getMonth() + 1,
+                        day: now.getDate(),
+                        hour: now.getHours(),
+                        minute: now.getMinutes(),
+                        second: now.getSeconds(),
+                        date: dateStr,
+                        level: parseFloat(waterLevel.toFixed(1)),
+                        rain_mm: parseFloat((waterLevel * 10.0).toFixed(1)),
+                        volt: parseFloat(voltVal.toFixed(2)),
+                        percent: parseFloat(percent.toFixed(1)),
+                        press: parseFloat(pressureBar.toFixed(3)),
+                        raw: rawVal
+                    };
+
+                    saveRecordToDB(record);
+                }
+
             } catch (e) {
                 addLog(`[LỖI PARSE JSON] Gói tin không đúng cú pháp: ${e.message}`);
             }
         });
+
+        // =====================================================================
+        // 5. BỘ LỌC TRUY VẤN VÀ THỐNG KÊ SỐ LIỆU
+        // =====================================================================
+        function applyFilter() {
+            if (!dbInstance) return;
+
+            const selYear = document.getElementById('filter-year').value;
+            const selMonth = document.getElementById('filter-month').value;
+            const selDate = document.getElementById('filter-date').value;
+            const hourStart = parseInt(document.getElementById('filter-hour-start').value);
+            const hourEnd = parseInt(document.getElementById('filter-hour-end').value);
+
+            const tx = dbInstance.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.getAll();
+
+            request.onsuccess = () => {
+                const allRecords = request.result || [];
+                
+                // Lọc theo các tiêu chí đã chọn
+                filteredRecordsCache = allRecords.filter(r => {
+                    if (selYear !== 'ALL' && r.year !== parseInt(selYear)) return false;
+                    if (selMonth !== 'ALL' && r.month !== parseInt(selMonth)) return false;
+                    if (selDate && r.date !== selDate) return false;
+                    if (r.hour < hourStart || r.hour > hourEnd) return false;
+                    return true;
+                });
+
+                // Cập nhật thẻ thống kê
+                updateSummaryStatistics(filteredRecordsCache);
+
+                // Cập nhật bảng xem trước
+                renderPreviewTable(filteredRecordsCache);
+            };
+        }
+
+        function resetFilter() {
+            document.getElementById('filter-year').value = '2026';
+            document.getElementById('filter-month').value = 'ALL';
+            document.getElementById('filter-date').value = '';
+            document.getElementById('filter-hour-start').value = '0';
+            document.getElementById('filter-hour-end').value = '23';
+            applyFilter();
+        }
+
+        function updateSummaryStatistics(records) {
+            const count = records.length;
+            document.getElementById('stat-count').innerText = count.toLocaleString();
+
+            if (count === 0) {
+                document.getElementById('stat-avg').innerHTML = '0.0 <span class="text-xs font-normal">cm</span>';
+                document.getElementById('stat-avg-mm').innerText = '0.0 mm';
+                document.getElementById('stat-max').innerHTML = '0.0 <span class="text-xs font-normal">cm</span>';
+                document.getElementById('stat-max-time').innerText = 'Thời điểm: --:--';
+                document.getElementById('stat-min').innerHTML = '0.0 <span class="text-xs font-normal">cm</span>';
+                document.getElementById('stat-min-time').innerText = 'Thời điểm: --:--';
+                return;
+            }
+
+            let sum = 0;
+            let maxRec = records[0];
+            let minRec = records[0];
+
+            records.forEach(r => {
+                sum += r.level;
+                if (r.level > maxRec.level) maxRec = r;
+                if (r.level < minRec.level) minRec = r;
+            });
+
+            const avg = sum / count;
+            document.getElementById('stat-avg').innerHTML = avg.toFixed(1) + ' <span class="text-xs font-normal">cm</span>';
+            document.getElementById('stat-avg-mm').innerText = (avg * 10.0).toFixed(1) + ' mm';
+            document.getElementById('stat-max').innerHTML = maxRec.level.toFixed(1) + ' <span class="text-xs font-normal">cm</span>';
+            document.getElementById('stat-max-time').innerText = 'Lúc: ' + (maxRec.datetime_str ? maxRec.datetime_str.split(' ')[1] : '--');
+            document.getElementById('stat-min').innerHTML = minRec.level.toFixed(1) + ' <span class="text-xs font-normal">cm</span>';
+            document.getElementById('stat-min-time').innerText = 'Lúc: ' + (minRec.datetime_str ? minRec.datetime_str.split(' ')[1] : '--');
+        }
+
+        function renderPreviewTable(records) {
+            const tbody = document.getElementById('preview-tbody');
+            if (records.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-500">Không tìm thấy bản ghi nào phù hợp với bộ lọc hiện tại.</td></tr>`;
+                return;
+            }
+
+            // Hiển thị 15 bản ghi mới nhất
+            const displayList = records.slice(-15).reverse();
+            let html = '';
+
+            displayList.forEach((r, idx) => {
+                let statusBadge = '<span class="text-emerald-400 font-semibold">An toàn</span>';
+                if (r.level >= 400) statusBadge = '<span class="text-rose-400 font-bold">Nguy hiểm</span>';
+                else if (r.level >= 250) statusBadge = '<span class="text-amber-400 font-bold">Mức cao</span>';
+
+                html += `
+                    <tr class="hover:bg-slate-800/60 transition">
+                        <td class="px-4 py-2.5 font-mono text-slate-500">${idx + 1}</td>
+                        <td class="px-4 py-2.5 font-mono text-cyan-300">${r.datetime_str || r.timestamp}</td>
+                        <td class="px-4 py-2.5 text-right font-bold text-white">${r.level.toFixed(1)}</td>
+                        <td class="px-4 py-2.5 text-right font-bold text-cyan-400">${r.rain_mm ? r.rain_mm.toFixed(1) : (r.level * 10).toFixed(1)}</td>
+                        <td class="px-4 py-2.5 text-right font-mono text-slate-300">${r.volt.toFixed(2)}</td>
+                        <td class="px-4 py-2.5 text-right font-mono text-emerald-400">${r.press.toFixed(3)}</td>
+                        <td class="px-4 py-2.5 text-center font-mono text-blue-400">${r.percent.toFixed(1)}%</td>
+                        <td class="px-4 py-2.5 text-center">${statusBadge}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        // =====================================================================
+        // 6. XUẤT FILE BÁO CÁO EXCEL (.XLSX) CHUẨN NHIỀU SHEET CHO NGHIÊN CỨU
+        // =====================================================================
+        function exportToExcel() {
+            if (!filteredRecordsCache || filteredRecordsCache.length === 0) {
+                alert('Không có dữ liệu nào trong bộ lọc hiện tại để xuất Excel! Vui lòng kiểm tra lại bộ lọc hoặc nhận thêm dữ liệu.');
+                return;
+            }
+
+            // --- SHEET 1: DỮ LIỆU CHI TIẾT (RAW DATA) ---
+            const rawRows = filteredRecordsCache.map((r, i) => ({
+                "STT": i + 1,
+                "Thời Gian Đo": r.datetime_str || r.timestamp,
+                "Năm": r.year,
+                "Tháng": r.month,
+                "Ngày": r.day,
+                "Giờ": r.hour,
+                "Phút": r.minute,
+                "Giây": r.second,
+                "Mực Nước (cm)": r.level,
+                "Lượng Mưa Quy Đổi (mm)": r.rain_mm || (r.level * 10),
+                "Điện Áp Cảm Biến (V)": r.volt,
+                "Áp Suất Thủy Tĩnh (Bar)": r.press,
+                "Tỷ Lệ Chiều Cao (%)": r.percent,
+                "ADC Raw (12-bit)": r.raw
+            }));
+            const wsRaw = XLSX.utils.json_to_sheet(rawRows);
+
+            // --- SHEET 2: TỔNG HỢP THEO TỪNG GIỜ (HOURLY SUMMARY) ---
+            const hourlyMap = {};
+            filteredRecordsCache.forEach(r => {
+                const key = `${r.date} Giờ ${String(r.hour).padStart(2, '0')}:00`;
+                if (!hourlyMap[key]) {
+                    hourlyMap[key] = { date: r.date, hour: r.hour, count: 0, sumLevel: 0, maxLevel: r.level, minLevel: r.level };
+                }
+                const h = hourlyMap[key];
+                h.count++;
+                h.sumLevel += r.level;
+                if (r.level > h.maxLevel) h.maxLevel = r.level;
+                if (r.level < h.minLevel) h.minLevel = r.level;
+            });
+
+            const hourlyRows = Object.keys(hourlyMap).sort().map(key => {
+                const h = hourlyMap[key];
+                const avgLevel = h.sumLevel / h.count;
+                return {
+                    "Mốc Thời Gian": key,
+                    "Ngày": h.date,
+                    "Khung Giờ": `${String(h.hour).padStart(2, '0')}:00 - ${String(h.hour).padStart(2, '0')}:59`,
+                    "Số Lượng Mẫu Đo": h.count,
+                    "Mực Nước TB (cm)": parseFloat(avgLevel.toFixed(2)),
+                    "Lượng Mưa TB (mm)": parseFloat((avgLevel * 10).toFixed(2)),
+                    "Mực Nước Đỉnh Max (cm)": parseFloat(h.maxLevel.toFixed(2)),
+                    "Mực Nước Thấp Nhất Min (cm)": parseFloat(h.minLevel.toFixed(2)),
+                    "Biến Thiên Dâng Nước (cm)": parseFloat((h.maxLevel - h.minLevel).toFixed(2))
+                };
+            });
+            const wsHourly = XLSX.utils.json_to_sheet(hourlyRows);
+
+            // --- SHEET 3: TỔNG HỢP THEO TỪNG NGÀY (DAILY SUMMARY) ---
+            const dailyMap = {};
+            filteredRecordsCache.forEach(r => {
+                const key = r.date;
+                if (!dailyMap[key]) {
+                    dailyMap[key] = { date: r.date, year: r.year, month: r.month, day: r.day, count: 0, sumLevel: 0, maxLevel: r.level, minLevel: r.level };
+                }
+                const d = dailyMap[key];
+                d.count++;
+                d.sumLevel += r.level;
+                if (r.level > d.maxLevel) d.maxLevel = r.level;
+                if (r.level < d.minLevel) d.minLevel = r.level;
+            });
+
+            const dailyRows = Object.keys(dailyMap).sort().map(key => {
+                const d = dailyMap[key];
+                const avgLevel = d.sumLevel / d.count;
+                return {
+                    "Ngày Đo": d.date,
+                    "Năm": d.year,
+                    "Tháng": d.month,
+                    "Ngày": d.day,
+                    "Tổng Số Mẫu Trong Ngày": d.count,
+                    "Mực Nước Trung Bình Ngày (cm)": parseFloat(avgLevel.toFixed(2)),
+                    "Lượng Mưa TB Ngày (mm)": parseFloat((avgLevel * 10).toFixed(2)),
+                    "Mực Nước Đỉnh Ngày (Max cm)": parseFloat(d.maxLevel.toFixed(2)),
+                    "Mực Nước Đáy Ngày (Min cm)": parseFloat(d.minLevel.toFixed(2)),
+                    "Chênh Lệch Biên Độ Nước (cm)": parseFloat((d.maxLevel - d.minLevel).toFixed(2))
+                };
+            });
+            const wsDaily = XLSX.utils.json_to_sheet(dailyRows);
+
+            // --- SHEET 4: TỔNG HỢP THEO NĂM & THÁNG (YEARLY/MONTHLY) ---
+            const monthlyMap = {};
+            filteredRecordsCache.forEach(r => {
+                const key = `${r.year}-Tháng ${String(r.month).padStart(2, '0')}`;
+                if (!monthlyMap[key]) {
+                    monthlyMap[key] = { year: r.year, month: r.month, count: 0, sumLevel: 0, maxLevel: r.level, minLevel: r.level };
+                }
+                const m = monthlyMap[key];
+                m.count++;
+                m.sumLevel += r.level;
+                if (r.level > m.maxLevel) m.maxLevel = r.level;
+                if (r.level < m.minLevel) m.minLevel = r.level;
+            });
+
+            const monthlyRows = Object.keys(monthlyMap).sort().map(key => {
+                const m = monthlyMap[key];
+                const avgLevel = m.sumLevel / m.count;
+                return {
+                    "Năm - Tháng": key,
+                    "Năm": m.year,
+                    "Tháng": m.month,
+                    "Tổng Mẫu Thu Thập": m.count,
+                    "Mực Nước TB Tháng (cm)": parseFloat(avgLevel.toFixed(2)),
+                    "Lượng Mưa TB Tháng (mm)": parseFloat((avgLevel * 10).toFixed(2)),
+                    "Đỉnh Nước Cao Nhất Trong Tháng (cm)": parseFloat(m.maxLevel.toFixed(2))
+                };
+            });
+            const wsMonthly = XLSX.utils.json_to_sheet(monthlyRows);
+
+            // TẠO WORKBOOK VÀ GẮN CÁC SHEET VÀO
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, wsRaw, "Du_Lieu_Chi_Tiet");
+            XLSX.utils.book_append_sheet(wb, wsHourly, "Tong_Hop_Theo_Gio");
+            XLSX.utils.book_append_sheet(wb, wsDaily, "Tong_Hop_Theo_Ngay");
+            XLSX.utils.book_append_sheet(wb, wsMonthly, "Tong_Hop_Theo_Nam");
+
+            // Tên file xuất theo thời gian thực
+            const now = new Date();
+            const filename = `Bao_Cao_Luong_Mua_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.xlsx`;
+
+            // Kích hoạt download
+            XLSX.writeFile(wb, filename);
+            addLog(`[EXCEL] Đã xuất file thành công: ${filename} (${filteredRecordsCache.length} dòng số liệu)`);
+        }
+
+        // Xuất file CSV nhanh
+        function exportToCSV() {
+            if (!filteredRecordsCache || filteredRecordsCache.length === 0) {
+                alert('Không có dữ liệu để xuất CSV!');
+                return;
+            }
+            const rawRows = filteredRecordsCache.map((r, i) => ({
+                "STT": i + 1,
+                "ThoiGian": r.datetime_str || r.timestamp,
+                "Nam": r.year,
+                "Thang": r.month,
+                "Ngay": r.day,
+                "Gio": r.hour,
+                "MucNuoc_cm": r.level,
+                "LuongMua_mm": r.rain_mm || (r.level * 10),
+                "DienAp_V": r.volt,
+                "ApSuat_bar": r.press
+            }));
+            const ws = XLSX.utils.json_to_sheet(rawRows);
+            const csv = XLSX.utils.sheet_to_csv(ws);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `Du_Lieu_Luong_Mua_${Date.now()}.csv`;
+            link.click();
+        }
+
+        // =====================================================================
+        // 7. CÔNG CỤ TẠO DỮ LIỆU TEST & QUẢN TRỊ CSDL
+        // =====================================================================
+        function generateSampleData() {
+            const now = new Date();
+            const records = [];
+            for (let i = 49; i >= 0; i--) {
+                const sampleTime = new Date(now.getTime() - i * 3 * 60 * 1000); // lùi mỗi lần 3 phút
+                const level = Math.max(10.0, Math.min(450.0, 50.0 + Math.sin(i / 5.0) * 40.0 + (Math.random() * 8.0)));
+                const volt = 0.10 + (level / 500.0) * (3.3 - 0.10);
+                const press = level / 1019.72;
+                const percent = (level / 500.0) * 100.0;
+
+                records.push({
+                    timestamp: sampleTime.toISOString(),
+                    datetime_str: sampleTime.getFullYear() + '-' + 
+                                  String(sampleTime.getMonth() + 1).padStart(2, '0') + '-' + 
+                                  String(sampleTime.getDate()).padStart(2, '0') + ' ' + 
+                                  String(sampleTime.getHours()).padStart(2, '0') + ':' + 
+                                  String(sampleTime.getMinutes()).padStart(2, '0') + ':' + 
+                                  String(sampleTime.getSeconds()).padStart(2, '0'),
+                    year: sampleTime.getFullYear(),
+                    month: sampleTime.getMonth() + 1,
+                    day: sampleTime.getDate(),
+                    hour: sampleTime.getHours(),
+                    minute: sampleTime.getMinutes(),
+                    second: sampleTime.getSeconds(),
+                    date: sampleTime.toISOString().split('T')[0],
+                    level: parseFloat(level.toFixed(1)),
+                    rain_mm: parseFloat((level * 10.0).toFixed(1)),
+                    volt: parseFloat(volt.toFixed(2)),
+                    percent: parseFloat(percent.toFixed(1)),
+                    press: parseFloat(press.toFixed(3)),
+                    raw: Math.round((volt / 3.3) * 4095)
+                });
+            }
+
+            const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            records.forEach(r => store.add(r));
+            tx.oncomplete = () => {
+                updateDbCountDisplay();
+                applyFilter();
+                addLog(`[TEST DATA] Đã tạo thành công 50 mẫu số liệu mô phỏng theo giờ/ngày!`);
+            };
+        }
+
+        function clearDatabase() {
+            if (!confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử dữ liệu đã lưu trong CSDL trình duyệt không?')) {
+                return;
+            }
+            const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            store.clear();
+            tx.oncomplete = () => {
+                updateDbCountDisplay();
+                applyFilter();
+                addLog('[CSDL] Đã làm sạch toàn bộ dữ liệu lưu trữ.');
+            };
+        }
 
         function changeTopic() {
             const newTopic = document.getElementById('topic-input').value.trim();
@@ -350,6 +1024,11 @@
         function clearLogs() {
             document.getElementById('log-console').innerHTML = '';
         }
+
+        // Khởi động CSDL khi tải trang
+        window.addEventListener('DOMContentLoaded', () => {
+            initDatabase();
+        });
     </script>
 </body>
 </html>

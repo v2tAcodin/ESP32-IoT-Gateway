@@ -26,3 +26,12 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 compile_commands.json
+
+# Python & Data Logger
+__pycache__/
+*.py[cod]
+*$py.class
+*.db
+*.sqlite3
+*.xlsx
+
