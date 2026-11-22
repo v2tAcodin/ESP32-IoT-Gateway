@@ -3,15 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ Thống Giám Sát Mực Nước & Cảnh Báo Ngập Lụt IoT (STM32 & ESP32-C3)</title>
+    <title>Hệ Thống Giám Sát Mực Nước IoT Thủy Văn (STM32 & ESP32-C3)</title>
     <!-- Tailwind CSS qua CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js để vẽ đồ thị thời gian thực -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- MQTT.js chạy trực tiếp trên trình duyệt qua WebSocket Secure -->
+    <!-- MQTT.js qua CDN (phục vụ hiển thị số liệu Live real-time) -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-    <!-- SheetJS để xuất Excel .xlsx trực tiếp trên trình duyệt -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Chart.js qua CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Flatpickr (Chọn ngày dd/mm/yyyy chuẩn) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://npmcdn.com/flatpickr/dist/themes/dark.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/vn.js"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-6 font-sans">
     <div class="max-w-6xl mx-auto space-y-6">
@@ -22,178 +25,191 @@
                 <div class="flex items-center gap-3">
                     <span class="inline-block w-3.5 h-3.5 rounded-full bg-cyan-400 animate-pulse"></span>
                     <h1 class="text-xl md:text-2xl font-bold text-white tracking-wide">
-                        HỆ THỐNG GIÁM SÁT MỰC NƯỚC & LƯỢNG MƯA IOT
+                        HỆ THỐNG GIÁM SÁT MỰC NƯỚC IOT THỦY VĂN
                     </h1>
                 </div>
                 <p class="text-xs md:text-sm text-slate-400 mt-1">
-                    Cảm biến áp suất thủy tĩnh chìm (STM32F103) ➜ ESP32-C3 Gateway ➜ Cloud Broker ➜ CSDL Excel Nghiên Cứu
+                    Cảm biến áp suất thủy tĩnh chìm (STM32F103) ➜ ESP32-C3 Gateway ➜ Cloud Broker ➜ Backend Service SQLite 24/7
                 </p>
             </div>
-            <div class="flex flex-wrap items-center gap-3">
+            <div class="flex flex-wrap items-center gap-2.5">
+                <!-- Nút mở Settings Modal -->
+                <button onclick="openSettingsModal()" 
+                        class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-700/80 hover:bg-slate-600 text-cyan-300 border border-slate-600 flex items-center gap-1.5 transition shadow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    <span>Cài Đặt Ngưỡng</span>
+                </button>
+
+                <!-- Badge trạng thái 3 mức cảnh báo (Áp dụng Hysteresis) + Mất dữ liệu + Lỗi cảm biến -->
                 <span id="water-alert-badge" class="px-3 py-1.5 text-xs font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                    ✔ AN TOÀN / BÌNH THƯỜNG
+                    ✔ AN TOÀN
                 </span>
-                <span id="status-badge" class="px-3 py-1.5 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    Đang kết nối Cloud...
+                <span id="backend-status-badge" class="px-3 py-1.5 text-xs font-semibold rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                    Backend API: Đang kết nối...
                 </span>
-                <span class="text-xs text-slate-400" id="last-update">Cập nhật: Chưa có</span>
+                <span class="text-xs text-slate-400 font-mono" id="last-update">Cập nhật: Chưa có</span>
             </div>
         </header>
 
-        <!-- CẤU HÌNH TOPIC NHANH -->
+        <!-- CẤU HÌNH TOPIC & TRẠNG THÁI BROKER -->
         <section class="bg-slate-800/70 border border-slate-700/60 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-3 shadow">
             <span class="text-xs md:text-sm text-slate-300 whitespace-nowrap font-medium flex items-center gap-2">
                 <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                 MQTT Topic đang lắng nghe:
             </span>
-            <input type="text" id="topic-input" value="my_iot_project/stm32_sensor_data" 
-                   class="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-xs md:text-sm text-cyan-400 flex-1 w-full focus:outline-none focus:border-cyan-500 font-mono">
-            <button onclick="changeTopic()" 
-                    class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs md:text-sm px-4 py-1.5 rounded-lg font-medium transition shadow whitespace-nowrap">
-                Đổi Kênh
-            </button>
-        </section>
-
-        <!-- VALUE CARDS (THẺ THÔNG SỐ MỰC NƯỚC / LƯỢNG MƯA) -->
-        <section class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
-            <!-- THẺ 1: MỰC NƯỚC HIỆN TẠI (CM & MM) -->
-            <div class="bg-slate-800 border-2 border-cyan-500/40 rounded-2xl p-5 relative overflow-hidden shadow-lg bg-gradient-to-br from-slate-800 to-cyan-950/20">
-                <div class="text-xs uppercase tracking-wider font-bold text-cyan-400 mb-2 flex items-center gap-1.5">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
-                    Mực Nước / Chiều Cao Cột Nước
-                </div>
-                <div class="flex items-baseline gap-2">
-                    <span id="val-level" class="text-4xl font-black text-cyan-300">0.0</span>
-                    <span class="text-xl font-bold text-cyan-500">cm</span>
-                </div>
-                <!-- Thanh tiến trình mô phỏng mức nước -->
-                <div class="w-full bg-slate-700/60 rounded-full h-2.5 mt-3 overflow-hidden">
-                    <div id="bar-water" class="bg-gradient-to-r from-cyan-500 to-blue-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
-                </div>
-                <div class="mt-2 text-xs text-slate-400 flex justify-between">
-                    <span>Quy đổi: <strong id="val-rain-mm" class="text-cyan-300">0.0</strong> mm</span>
-                    <span>(<strong id="val-level-m" class="text-slate-300">0.00</strong> m)</span>
-                </div>
+            <div class="flex-1 w-full flex items-center gap-2">
+                <input type="text" id="topic-input" value="my_iot_project/stm32_sensor_data" 
+                       class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-xs md:text-sm text-cyan-300 font-mono focus:outline-none focus:border-cyan-500 transition">
+                <button onclick="changeTopic()" 
+                        class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs md:text-sm px-4 py-1.5 rounded-lg font-medium transition whitespace-nowrap border border-slate-600">
+                    Đổi Kênh
+                </button>
             </div>
-
-            <!-- THẺ 2: TỶ LỆ DÂNG NƯỚC (%) -->
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 relative overflow-hidden shadow-lg">
-                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Tỷ Lệ Chiều Cao Cột Nước</div>
-                <div class="flex items-baseline gap-2">
-                    <span id="val-percent" class="text-4xl font-extrabold text-blue-400">0.0</span>
-                    <span class="text-xl font-bold text-slate-500">%</span>
-                </div>
-                <div class="mt-4 text-xs text-slate-400">
-                    Thang đo danh định: <strong class="text-slate-300">0 - 500 cm (5.0m)</strong>
-                </div>
-            </div>
-
-            <!-- THẺ 3: ÁP SUẤT THỦY TĨNH (BAR) -->
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 relative overflow-hidden shadow-lg">
-                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Áp Suất Thủy Tĩnh (P = ρgh)</div>
-                <div class="flex items-baseline gap-2">
-                    <span id="val-pressure" class="text-4xl font-extrabold text-emerald-400">0.000</span>
-                    <span class="text-lg font-bold text-slate-500">Bar</span>
-                </div>
-                <div class="mt-4 text-xs text-slate-400 flex justify-between items-center">
-                    <span>Điện áp: <strong id="val-volt" class="text-slate-300">0.00</strong> V</span>
-                    <span>ADC: <strong id="val-raw" class="text-slate-400">0</strong></span>
-                </div>
-            </div>
-
-            <!-- THẺ 4: TỔNG SỐ GÓI TIN -->
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 relative overflow-hidden shadow-lg">
-                <div class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2">Lưu Lượng Gói Tin (Packets)</div>
-                <div class="flex items-baseline gap-2">
-                    <span id="val-count" class="text-4xl font-extrabold text-violet-400">0</span>
-                    <span class="text-xl font-bold text-slate-500">gói</span>
-                </div>
-                <div class="mt-4 text-xs text-slate-400 flex justify-between items-center">
-                    <span>CSDL Trình duyệt: <strong id="val-db-count" class="text-emerald-400 font-bold">0</strong> bản ghi</span>
-                    <span class="text-emerald-400 text-xs font-mono">QoS 0</span>
-                </div>
-            </div>
-        </section>
-
-        <!-- ĐỒ THỊ THỜI GIAN THỰC -->
-        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
-                <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                    <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
-                    Đồ Thị Mực Nước & Lượng Mưa Theo Thời Gian Thực
-                </h2>
-                <span class="text-xs text-slate-400 bg-slate-900/80 px-3 py-1 rounded-full border border-slate-700">
-                    Giữ 30 điểm đo gần nhất
+            <div class="flex items-center gap-2 text-xs text-slate-400 font-mono">
+                <span>Broker Live:</span>
+                <span id="status-badge" class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Đang kết nối...
                 </span>
             </div>
-            <div class="h-80 w-full">
+        </section>
+
+        <!-- PHẦN 1: THẺ HIỂN THỊ THÔNG SỐ LIVE (REAL-TIME) -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Thẻ 1: Mực Nước -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-cyan-500/50 transition">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mực Nước Hiện Tại</div>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span class="text-4xl md:text-5xl font-black text-cyan-400 font-mono tracking-tight" id="val-level">0.0</span>
+                    <span class="text-slate-400 font-medium text-lg">cm</span>
+                </div>
+                <div class="mt-2 text-xs text-slate-400">
+                    Tương đương: <strong class="text-slate-200" id="val-level-m">0.00</strong> mét
+                </div>
+                <div class="absolute right-3 top-3 opacity-10 text-cyan-400">
+                    <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+                </div>
+            </div>
+
+            <!-- Thẻ 2: Tốc Độ Thay Đổi Mực Nước -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-emerald-500/50 transition">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tốc Độ Thay Đổi Mực Nước</div>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span class="text-4xl md:text-5xl font-black text-emerald-400 font-mono tracking-tight" id="val-rate-cm-h">0.0</span>
+                    <span class="text-slate-400 font-medium text-lg">cm/h</span>
+                </div>
+                <div class="mt-2 text-xs text-slate-400">
+                    Tính từ $\Delta h / \Delta t$ liên tiếp
+                </div>
+                <div class="absolute right-3 top-3 opacity-10 text-emerald-400">
+                    <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24"><path d="M13 3l-4 7h6l-5 11 11-13h-6l5-5z"/></svg>
+                </div>
+            </div>
+
+            <!-- Thẻ 3: Áp Suất Thủy Tĩnh -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-blue-500/50 transition">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Áp Suất Thủy Tĩnh</div>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span class="text-4xl md:text-5xl font-black text-blue-400 font-mono tracking-tight" id="val-pressure">0.000</span>
+                    <span class="text-slate-400 font-medium text-lg">Bar</span>
+                </div>
+                <div class="mt-2 text-xs text-slate-400">
+                    Cột nước: <strong class="text-slate-200" id="val-percent">0.0</strong>% (Dải đo 500 cm)
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-1.5 mt-2 overflow-hidden">
+                    <div id="bar-water" class="bg-blue-500 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <div class="absolute right-3 top-3 opacity-10 text-blue-400">
+                    <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V18h-2v-1.07A7 7 0 0 1 5.07 11H6v-2h-.93A7 7 0 0 1 11 5.07V6h2v-.93A7 7 0 0 1 18.93 11H18v2h.93A7 7 0 0 1 13 16.93z"/></svg>
+                </div>
+            </div>
+
+            <!-- Thẻ 4: Điện Áp & Sức Khỏe Cảm Biến -->
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-purple-500/50 transition">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Điện Áp Cảm Biến</div>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span class="text-4xl md:text-5xl font-black text-purple-400 font-mono tracking-tight" id="val-volt">0.00</span>
+                    <span class="text-slate-400 font-medium text-lg">V</span>
+                </div>
+                <div class="mt-2 text-xs flex items-center justify-between">
+                    <span class="text-slate-400">Sức khỏe ADC:</span>
+                    <span id="val-sensor-status-label" class="text-emerald-400 font-semibold text-xs">Tốt</span>
+                </div>
+                <div class="mt-1 text-[11px] text-slate-500">
+                    Gói tin nhận: <strong class="text-slate-300 font-mono" id="val-count">0</strong>
+                </div>
+                <div class="absolute right-3 top-3 opacity-10 text-purple-400">
+                    <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.5c.49 0 .78.36.49.77L11 21z"/></svg>
+                </div>
+            </div>
+        </section>
+
+        <!-- ĐỒ THỊ REAL-TIME LIVE 30 ĐIỂM -->
+        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-xl space-y-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-cyan-400 animate-ping"></span>
+                    <h2 class="text-base font-bold text-white tracking-wide">
+                        Đồ Thị Dao Động Tức Thời (Real-time Live 30 Điểm Đo Gần Nhất)
+                    </h2>
+                </div>
+                <span class="text-xs text-slate-400">Cập nhật mỗi khi có bản tin</span>
+            </div>
+            <div class="h-56 w-full">
                 <canvas id="sensorChart"></canvas>
             </div>
         </section>
 
         <!-- ===================================================================== -->
-        <!-- KHU VỰC QUẢN LÝ CƠ SỞ DỮ LIỆU & BỘ LỌC XUẤT EXCEL NGHIÊN CỨU           -->
+        <!-- PHẦN 2: TRUNG TÂM DỮ LIỆU THỦY VĂN (KẾT NỐI BACKEND SERVICE SQLITE)   -->
         <!-- ===================================================================== -->
-        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center pb-4 border-b border-slate-700 gap-3">
+        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-5">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-slate-700/80 pb-4">
                 <div>
-                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                        <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                        Cơ Sở Dữ Liệu Nghiên Cứu & Trích Xuất Excel
+                    <h2 class="text-lg md:text-xl font-bold text-white flex items-center gap-2.5">
+                        <span class="w-3 h-3 rounded-full bg-indigo-500"></span>
+                        CƠ SỞ DỮ LIỆU THỦY VĂN & BÁO CÁO NGHIÊN CỨU
                     </h2>
                     <p class="text-xs text-slate-400 mt-1">
-                        Dữ liệu được lưu trữ trực tiếp vào CSDL cục bộ (IndexedDB). Hỗ trợ tra cứu theo từng Giờ, Ngày, Tháng, Năm và xuất file Excel (.xlsx) chuẩn hóa nhiều Sheet.
+                        Dữ liệu lưu trữ bền vững tại Backend SQLite (<code class="text-cyan-300">rainfall_data.db</code>). Tra cứu, phân tích xu hướng và xuất file Excel/CSV.
                     </p>
                 </div>
-                
-                <!-- Cấu hình lưu trữ -->
-                <div class="flex flex-wrap items-center gap-3 text-xs bg-slate-900/80 p-2.5 rounded-xl border border-slate-700">
-                    <label class="flex items-center gap-2 cursor-pointer text-slate-300 font-medium">
-                        <input type="checkbox" id="auto-save-toggle" checked class="w-4 h-4 text-emerald-500 rounded bg-slate-800 border-slate-600 focus:ring-emerald-500">
-                        <span>Tự động lưu CSDL</span>
-                    </label>
-                    <span class="text-slate-600">|</span>
-                    <label class="flex items-center gap-1.5 text-slate-300">
-                        <span>Chu kỳ lưu:</span>
-                        <select id="log-interval" class="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-cyan-400 focus:outline-none">
-                            <option value="0">Tất cả gói (~300ms)</option>
-                            <option value="1000">1 giây / mẫu</option>
-                            <option value="2000" selected>2 giây / mẫu (Khuyên dùng)</option>
-                            <option value="5000">5 giây / mẫu</option>
-                            <option value="10000">10 giây / mẫu</option>
-                            <option value="60000">1 phút / mẫu</option>
-                        </select>
-                    </label>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-400 font-mono">Tổng mẫu CSDL:</span>
+                    <span id="db-count-badge" class="px-3 py-1 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono text-xs font-bold">
+                        Đang đọc API...
+                    </span>
                 </div>
             </div>
 
-            <!-- BỘ LỌC TRUY VẤN THEO NGÀY / NĂM / GIỜ -->
-            <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/60 space-y-4">
-                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
-                    Bộ Lọc Truy Vấn Số Liệu Nghiên Cứu
-                </div>
-                
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-                    <!-- Lọc Năm -->
+            <!-- BỘ LỌC DỮ LIỆU ĐA TẦNG -->
+            <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-700 space-y-3">
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <!-- Nguồn dữ liệu -->
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Năm:</label>
-                        <select id="filter-year" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
-                            <option value="ALL">-- Tất cả các năm --</option>
-                            <option value="2024">2024</option>
-                            <option value="2025">2025</option>
-                            <option value="2026" selected>2026</option>
-                            <option value="2027">2027</option>
+                        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Nguồn Dữ Liệu</label>
+                        <select id="filter-source" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="REAL" selected>Dữ Liệu Thật (Mặc định)</option>
+                            <option value="SIMULATED">Dữ Liệu Giả Lập (Test)</option>
+                            <option value="ALL">Tất Cả (Thật + Giả lập)</option>
                         </select>
                     </div>
 
-                    <!-- Lọc Tháng -->
+                    <!-- Năm -->
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Tháng:</label>
-                        <select id="filter-month" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
-                            <option value="ALL" selected>-- Tất cả các tháng --</option>
+                        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Năm</label>
+                        <select id="filter-year" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="ALL">Tất Cả Năm</option>
+                            <option value="2026" selected>2026</option>
+                            <option value="2027">2027</option>
+                            <option value="2028">2028</option>
+                        </select>
+                    </div>
+
+                    <!-- Tháng -->
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Tháng</label>
+                        <select id="filter-month" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="ALL" selected>Tất Cả Tháng</option>
                             <option value="1">Tháng 1</option>
                             <option value="2">Tháng 2</option>
                             <option value="3">Tháng 3</option>
@@ -209,18 +225,18 @@
                         </select>
                     </div>
 
-                    <!-- Lọc Ngày cụ thể -->
+                    <!-- Chọn Ngày (Flatpickr dd/mm/yyyy) -->
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Ngày (Tùy chọn):</label>
-                        <input type="date" id="filter-date" 
-                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Chọn Ngày (dd/mm/yyyy)</label>
+                        <input type="text" id="filter-date" placeholder="Chọn ngày..." 
+                               class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-cyan-300 font-mono focus:outline-none focus:border-cyan-500">
                     </div>
 
-                    <!-- Lọc Giờ Bắt Đầu -->
+                    <!-- Khung Giờ Bắt Đầu -->
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Từ Giờ:</label>
-                        <select id="filter-hour-start" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
-                            <option value="0" selected>00:00 (Đầu ngày)</option>
+                        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Từ Giờ</label>
+                        <select id="filter-hour-start" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+                            <option value="0" selected>00:00</option>
                             <option value="1">01:00</option>
                             <option value="2">02:00</option>
                             <option value="3">03:00</option>
@@ -247,11 +263,10 @@
                         </select>
                     </div>
 
-                    <!-- Lọc Giờ Kết Thúc -->
+                    <!-- Khung Giờ Kết Thúc -->
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Đến Giờ:</label>
-                        <select id="filter-hour-end" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
-                            <option value="23" selected>23:59 (Cuối ngày)</option>
+                        <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Đến Giờ</label>
+                        <select id="filter-hour-end" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
                             <option value="0">00:59</option>
                             <option value="1">01:59</option>
                             <option value="2">02:59</option>
@@ -275,7 +290,7 @@
                             <option value="20">20:59</option>
                             <option value="21">21:59</option>
                             <option value="22">22:59</option>
-                            <option value="23">23:59</option>
+                            <option value="23" selected>23:59</option>
                         </select>
                     </div>
                 </div>
@@ -291,487 +306,763 @@
                         </button>
                     </div>
 
-                    <!-- Các nút Xuất Excel & Thao Tác -->
+                    <!-- Các nút Xuất Excel & Thao Tác Backend -->
                     <div class="flex flex-wrap items-center gap-2">
                         <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-lg font-bold transition shadow-lg flex items-center gap-1.5">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                             📗 Xuất Báo Cáo Excel (.xlsx)
                         </button>
                         <button onclick="exportToCSV()" class="bg-teal-700 hover:bg-teal-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition">
-                            📄 Xuất CSV
+                            📄 Xuất CSV (BOM UTF-8)
                         </button>
-                        <button onclick="generateSampleData()" class="bg-indigo-700/70 hover:bg-indigo-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition" title="Tạo 50 mẫu thử ngẫu nhiên để kiểm tra bộ lọc">
+                        <button onclick="generateSampleData()" class="bg-indigo-700/70 hover:bg-indigo-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition" title="Tạo 50 mẫu thử giả lập trên Backend">
                             🧪 Thử nghiệm (+50 mẫu)
                         </button>
-                        <button onclick="clearDatabase()" class="bg-rose-900/60 hover:bg-rose-800 text-rose-300 text-xs px-3 py-2 rounded-lg font-medium transition border border-rose-700/50">
+                        <button onclick="openClearDatabaseModal()" class="bg-rose-900/60 hover:bg-rose-800 text-rose-300 text-xs px-3 py-2 rounded-lg font-medium transition border border-rose-700/50">
                             🗑️ Xóa CSDL
                         </button>
                     </div>
                 </div>
             </div>
 
-            <!-- THẺ THỐNG KÊ NHANH CỦA DỮ LIỆU ĐANG LỌC -->
+            <!-- THẺ THỐNG KÊ NHANH (LOẠI BỎ MẪU LỖI RA KHỎI THỐNG KÊ MAX/MIN/AVG) -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700">
                     <div class="text-[11px] text-slate-400 font-medium">Số Mẫu Thỏa Điểm Lọc</div>
                     <div class="text-2xl font-bold text-white mt-1" id="stat-count">0</div>
-                    <div class="text-[11px] text-slate-500 mt-0.5">mẫu ghi nhận</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5" id="stat-source-info">Nguồn: Dữ liệu thật</div>
+                    <div class="text-[10px] text-amber-400 mt-0.5 hidden" id="stat-error-excluded-badge"></div>
                 </div>
                 <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700">
-                    <div class="text-[11px] text-slate-400 font-medium">Lượng Nước Trung Bình</div>
+                    <div class="text-[11px] text-slate-400 font-medium">Mực Nước Trung Bình (Hợp Lệ)</div>
                     <div class="text-2xl font-bold text-cyan-400 mt-1" id="stat-avg">0.0 <span class="text-xs font-normal">cm</span></div>
-                    <div class="text-[11px] text-slate-500 mt-0.5" id="stat-avg-mm">0.0 mm</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5" id="stat-avg-sub">Mực nước tính toán thủy văn</div>
                 </div>
                 <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700">
                     <div class="text-[11px] text-slate-400 font-medium">Đỉnh Mực Nước Cao Nhất (Max)</div>
                     <div class="text-2xl font-bold text-amber-400 mt-1" id="stat-max">0.0 <span class="text-xs font-normal">cm</span></div>
-                    <div class="text-[11px] text-slate-500 mt-0.5" id="stat-max-time">Thời điểm: --:--</div>
+                    <div class="text-[11px] text-amber-300/80 mt-0.5 font-mono" id="stat-max-time">Thời điểm: --/--/---- --:--:--</div>
                 </div>
                 <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700">
                     <div class="text-[11px] text-slate-400 font-medium">Mực Nước Thấp Nhất (Min)</div>
                     <div class="text-2xl font-bold text-emerald-400 mt-1" id="stat-min">0.0 <span class="text-xs font-normal">cm</span></div>
-                    <div class="text-[11px] text-slate-500 mt-0.5" id="stat-min-time">Thời điểm: --:--</div>
+                    <div class="text-[11px] text-emerald-300/80 mt-0.5 font-mono" id="stat-min-time">Thời điểm: --/--/---- --:--:--</div>
                 </div>
             </div>
 
-            <!-- BẢNG XEM TRƯỚC SỐ LIỆU ĐANG LỌC (DATA TABLE PREVIEW) -->
-            <div class="overflow-x-auto rounded-xl border border-slate-700 bg-slate-950/60">
-                <table class="w-full text-left text-xs text-slate-300">
-                    <thead class="bg-slate-800/90 text-slate-400 uppercase tracking-wider text-[11px] border-b border-slate-700 font-semibold">
-                        <tr>
-                            <th class="px-4 py-3">STT</th>
-                            <th class="px-4 py-3">Thời gian ghi nhận</th>
-                            <th class="px-4 py-3 text-right">Mực nước (cm)</th>
-                            <th class="px-4 py-3 text-right">Lượng mưa quy đổi (mm)</th>
-                            <th class="px-4 py-3 text-right">Điện áp (V)</th>
-                            <th class="px-4 py-3 text-right">Áp suất (Bar)</th>
-                            <th class="px-4 py-3 text-center">Tỷ lệ (%)</th>
-                            <th class="px-4 py-3 text-center">Trạng thái</th>
-                        </tr>
-                    </thead>
-                    <tbody id="preview-tbody" class="divide-y divide-slate-800">
-                        <tr>
-                            <td colspan="8" class="text-center py-6 text-slate-500">
-                                Chưa có dữ liệu hoặc chưa thực hiện thao tác lọc. Nhận dữ liệu tự động hoặc bấm "Thử nghiệm" để tạo mẫu test!
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <!-- BIỂU ĐỒ ĐƯỜNG KHOẢNG LỌC (DOWNSAMPLED VÀ NGẮT GAP NẾU MẤT DỮ LIỆU) -->
+            <div class="bg-slate-900/80 p-5 rounded-xl border border-slate-700 space-y-2">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                        <h3 class="text-sm font-bold text-white">
+                            Biểu Đồ Xu Hướng Mực Nước Theo Thời Gian (Khoảng Đang Lọc)
+                        </h3>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                        <span class="inline-flex items-center gap-1.5"><span class="w-3 h-0.5 bg-amber-400 inline-block"></span> Cảnh báo: <strong id="lbl-warn-threshold" class="text-amber-300">80</strong> cm</span>
+                        <span class="inline-flex items-center gap-1.5"><span class="w-3 h-0.5 bg-rose-500 inline-block"></span> Nguy hiểm: <strong id="lbl-danger-threshold" class="text-rose-400">200</strong> cm</span>
+                        <span id="chart-downsample-badge" class="hidden px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] font-mono">
+                            ⚡ Downsampled
+                        </span>
+                    </div>
+                </div>
+                <div class="h-64 w-full">
+                    <canvas id="historyChart"></canvas>
+                </div>
             </div>
-            <div class="flex justify-between items-center text-xs text-slate-400">
-                <span id="preview-showing-label">Hiển thị tối đa 15 dòng mẫu mới nhất (file Excel sẽ xuất toàn bộ bản ghi lọc).</span>
-                <span class="text-emerald-400 font-medium">✓ Định dạng file: Microsoft Excel OpenXML (.xlsx)</span>
+
+            <!-- BẢNG DỮ LIỆU: PHÂN TRANG (25/50/100) & SẮP XẾP CỘT -->
+            <div class="space-y-3">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div class="text-xs text-slate-400 flex items-center gap-2">
+                        <span>Hiển thị:</span>
+                        <select id="table-page-size" onchange="changePageSize(this.value)" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none">
+                            <option value="25" selected>25 dòng / trang</option>
+                            <option value="50">50 dòng / trang</option>
+                            <option value="100">100 dòng / trang</option>
+                        </select>
+                        <span id="pagination-summary" class="text-slate-500">Đang nạp từ API...</span>
+                    </div>
+
+                    <!-- Nút phân trang -->
+                    <div class="flex items-center gap-1.5 text-xs font-mono">
+                        <button id="btn-page-first" onclick="goToPage(1)" class="px-2.5 py-1 rounded bg-slate-900 border border-slate-700 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed">« Đầu</button>
+                        <button id="btn-page-prev" onclick="goToPage(currentPage - 1)" class="px-2.5 py-1 rounded bg-slate-900 border border-slate-700 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed">‹ Trước</button>
+                        <span id="page-indicator" class="px-3 py-1 rounded bg-slate-800 border border-slate-700 text-cyan-300 font-bold">1 / 1</span>
+                        <button id="btn-page-next" onclick="goToPage(currentPage + 1)" class="px-2.5 py-1 rounded bg-slate-900 border border-slate-700 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed">Sau ›</button>
+                        <button id="btn-page-last" onclick="goToPage(totalPages)" class="px-2.5 py-1 rounded bg-slate-900 border border-slate-700 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed">Cuối »</button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto rounded-xl border border-slate-700 bg-slate-950/60 shadow-inner">
+                    <table class="w-full text-left text-xs text-slate-300">
+                        <thead class="bg-slate-800/90 text-slate-400 uppercase tracking-wider text-[11px] border-b border-slate-700 font-semibold select-none">
+                            <tr>
+                                <th onclick="sortTable('id')" class="px-3.5 py-3 cursor-pointer hover:text-cyan-400">
+                                    STT <span id="sort-icon-id">▼</span>
+                                </th>
+                                <th onclick="sortTable('received_at')" class="px-3.5 py-3 cursor-pointer hover:text-cyan-400">
+                                    Thời Gian Nhận (dd/mm/yyyy HH:mm:ss UTC+7) <span id="sort-icon-received_at"></span>
+                                </th>
+                                <th onclick="sortTable('level_cm')" class="px-3.5 py-3 text-right cursor-pointer hover:text-cyan-400">
+                                    Mực Nước (cm) <span id="sort-icon-level_cm"></span>
+                                </th>
+                                <th class="px-3.5 py-3 text-right cursor-pointer hover:text-cyan-400" title="Tốc độ thay đổi giữa 2 mẫu liên tiếp: Δh / Δt">
+                                    Tốc Độ Thay Đổi (cm/h)
+                                </th>
+                                <th onclick="sortTable('volt')" class="px-3.5 py-3 text-right cursor-pointer hover:text-cyan-400">
+                                    Điện Áp (V) <span id="sort-icon-volt"></span>
+                                </th>
+                                <th onclick="sortTable('press_bar')" class="px-3.5 py-3 text-right cursor-pointer hover:text-cyan-400">
+                                    Áp Suất (Bar) <span id="sort-icon-press_bar"></span>
+                                </th>
+                                <th onclick="sortTable('percent')" class="px-3.5 py-3 text-center cursor-pointer hover:text-cyan-400">
+                                    Tỷ Lệ (%) <span id="sort-icon-percent"></span>
+                                </th>
+                                <th class="px-3.5 py-3 text-center">
+                                    Trạng Thái / Nguồn
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="preview-tbody" class="divide-y divide-slate-800">
+                            <tr>
+                                <td colspan="8" class="text-center py-6 text-slate-500">
+                                    Đang nạp dữ liệu từ Backend API...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="flex justify-between items-center text-xs text-slate-400 pt-1">
+                    <span>Mẹo: Click vào tiêu đề cột bất kỳ để sắp xếp Tăng dần (▲) / Giảm dần (▼).</span>
+                    <span class="text-emerald-400 font-medium">✓ Dữ liệu đọc trực tiếp từ SQLite Backend qua REST API</span>
+                </div>
             </div>
         </section>
 
-        <!-- CONSOLE LOG DỮ LIỆU THÔ (RAW LOG) -->
-        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
-            <div class="flex justify-between items-center mb-3">
-                <h3 class="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    Nhật ký gói tin JSON từ ESP32-C3 Gateway
-                </h3>
-                <button onclick="clearLogs()" class="text-xs text-slate-400 hover:text-rose-400 transition bg-slate-900 px-2.5 py-1 rounded border border-slate-700">Xóa Nhật Ký</button>
+        <!-- NHẬT KÝ HOẠT ĐỘNG (LOG CONSOLE) -->
+        <section class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg space-y-2">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Nhật Ký Hoạt Động (Console Log)</span>
+                <button onclick="clearLogs()" class="text-xs text-slate-400 hover:text-slate-200">Xóa Log</button>
             </div>
-            <div id="log-console" class="bg-slate-950 font-mono text-xs text-emerald-400 p-4 rounded-xl h-36 overflow-y-auto space-y-1 border border-slate-800">
-                <div class="text-slate-500">// Đang chờ dữ liệu từ ESP32-C3...</div>
+            <div id="log-console" class="h-28 overflow-y-auto bg-slate-950 p-3 rounded-lg border border-slate-700 text-xs font-mono text-slate-300 space-y-1">
+                <div class="text-slate-500">[SYSTEM] Khởi động Web Dashboard Giám Sát Mực Nước Thủy Văn...</div>
             </div>
         </section>
-
     </div>
 
-    <!-- SCRIPT XỬ LÝ TOÀN BỘ LOGIC: MQTT + CSDL INDEXEDDB + CHART + EXCEL EXPORT -->
+    <!-- ===================================================================== -->
+    <!-- MODAL 1: CÀI ĐẶT NGƯỠNG CẢNH BÁO, HYSTERESIS & SỨC KHỎE CẢM BIẾN        -->
+    <!-- ===================================================================== -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-600 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+            <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-cyan-400"></span>
+                    <h3 class="text-base font-bold text-white">Cài Đặt Ngưỡng Cảnh Báo & Thuật Toán</h3>
+                </div>
+                <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white">✕</button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <!-- 1. Ngưỡng Cảnh báo & Hysteresis -->
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700 space-y-3">
+                    <div class="font-semibold text-slate-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                        1. Ngưỡng Cảnh Báo Mực Nước & Hysteresis
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-slate-400 mb-1">Cảnh Báo (cm):</label>
+                            <input type="number" id="setting-warn" step="1" 
+                                   class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-amber-300 font-mono focus:outline-none focus:border-cyan-500">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">Nguy Hiểm (cm):</label>
+                            <input type="number" id="setting-danger" step="1" 
+                                   class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-rose-400 font-mono focus:outline-none focus:border-cyan-500">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1" title="Hysteresis: khoảng đệm chống nhấp nháy trạng thái khi dao động quanh ngưỡng">Hysteresis (cm):</label>
+                            <input type="number" id="setting-hysteresis" step="0.5" 
+                                   class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-cyan-300 font-mono focus:outline-none focus:border-cyan-500">
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-400 italic">
+                        * Ví dụ: Cảnh báo ở <strong class="text-amber-300">80 cm</strong>, Hysteresis <strong class="text-cyan-300">5 cm</strong> ➜ Nước dâng đạt 80 cm vào Cảnh báo; nước chỉ trở về An toàn khi rút xuống dưới <strong>75 cm</strong>.
+                    </p>
+                </div>
+
+                <!-- 2. Giám sát lỗi cảm biến -->
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700 space-y-3">
+                    <div class="font-semibold text-slate-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+                        2. Giám Sát Sức Khỏe Cảm Biến & Mất Dữ Liệu
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-slate-400 mb-1">Volt Min Hợp Lệ (V):</label>
+                            <input type="number" id="setting-volt-min" step="0.01" 
+                                   class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-slate-200 font-mono focus:outline-none focus:border-cyan-500">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">Volt Max Hợp Lệ (V):</label>
+                            <input type="number" id="setting-volt-max" step="0.01" 
+                                   class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-slate-200 font-mono focus:outline-none focus:border-cyan-500">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1" title="Quá N phút không có gói tin sẽ báo Mất dữ liệu">Timeout Mất Tin (Phút):</label>
+                            <input type="number" id="setting-timeout-min" step="1" 
+                                   class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-slate-200 font-mono focus:outline-none focus:border-cyan-500">
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-400 italic">
+                        * Quá N phút không có mẫu mới: Hiển thị <strong>"Mất dữ liệu"</strong> (tuyệt đối không hiển thị "An toàn").
+                    </p>
+                </div>
+
+                <!-- 3. Nhập dữ liệu cũ từ IndexedDB vào Backend SQLite -->
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700 space-y-2">
+                    <div class="font-semibold text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                            3. Nhập Dữ Liệu Cũ Từ IndexedDB Vào Backend
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-400">
+                        Chuyển các bản ghi đã lưu trên trình duyệt vào CSDL SQLite của Backend để bảo toàn lịch sử.
+                    </p>
+                    <div class="pt-1 flex items-center justify-between">
+                        <span id="indexeddb-count-label" class="text-[11px] text-slate-400">Đang quét IndexedDB...</span>
+                        <button onclick="importOldIndexedDBToBackend()" class="px-3 py-1.5 text-xs rounded bg-cyan-800 hover:bg-cyan-700 text-cyan-200 border border-cyan-600 transition font-medium">
+                            📥 Nhập Vào Backend Ngay
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer nút bấm -->
+            <div class="flex items-center justify-between pt-2 border-t border-slate-700">
+                <button onclick="resetSettingsToDefault()" class="text-xs text-slate-400 hover:text-amber-400 transition">
+                    Khôi Phục Mặc Định
+                </button>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeSettingsModal()" class="px-4 py-2 text-xs rounded-lg text-slate-300 hover:bg-slate-700 transition">
+                        Đóng
+                    </button>
+                    <button onclick="saveSettingsFromModal()" class="px-5 py-2 text-xs font-bold rounded-lg text-white bg-cyan-600 hover:bg-cyan-500 shadow transition">
+                        Lưu Cấu Hình
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 2: XÁC NHẬN XÓA CSDL (BẮT BUỘC GÕ "XOA" & TỰ BACKUP FILE SQLITE) -->
+    <!-- ===================================================================== -->
+    <div id="clear-db-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-rose-500/50 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center gap-3 text-rose-400">
+                <div class="w-10 h-10 rounded-full bg-rose-500/20 flex items-center justify-center border border-rose-500/40">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-white">Xác Nhận Xóa Cơ Sở Dữ Liệu</h3>
+                    <p class="text-xs text-rose-300">Hành động này sẽ xóa dữ liệu trên Backend SQLite!</p>
+                </div>
+            </div>
+
+            <div class="text-xs text-slate-300 space-y-2 bg-slate-900/80 p-3.5 rounded-xl border border-slate-700">
+                <p class="text-emerald-400 font-medium">
+                    ✓ Hệ thống sẽ <strong>TỰ ĐỘNG TẠO BẢN SAO LƯU SQLITE (.db) VÀ TẢI VỀ MÁY</strong> trước khi xóa để bảo vệ số liệu nghiên cứu.
+                </p>
+                <p>• Để tiến hành, vui lòng gõ chính xác chữ <strong class="text-rose-400 tracking-wider">XOA</strong> vào ô bên dưới:</p>
+            </div>
+
+            <input type="text" id="delete-confirm-input" placeholder="Gõ chữ XOA vào đây để xác nhận..."
+                   oninput="checkDeleteConfirmation(this.value)"
+                   class="w-full bg-slate-900 border border-rose-500/50 rounded-lg px-3 py-2 text-sm text-center font-bold text-rose-400 focus:outline-none focus:border-rose-400 tracking-wider">
+
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button onclick="closeClearDatabaseModal()" class="px-4 py-2 text-xs rounded-lg text-slate-300 hover:bg-slate-700 transition">
+                    Hủy Bỏ
+                </button>
+                <button id="btn-confirm-delete" onclick="executeClearDatabase()" disabled
+                        class="px-5 py-2 text-xs font-bold rounded-lg text-white bg-rose-600 opacity-40 cursor-not-allowed transition shadow flex items-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    Xác Nhận Xóa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIC JAVASCRIPT ĐIỀU HÀNH -->
     <script>
+        // =====================================================================
+        // 1. CẤU HÌNH & BỘ NHỚ LƯU TRỮ BỀN VỮNG (SETTINGS)
+        // =====================================================================
+        const SETTINGS_STORAGE_KEY = 'WaterLevelDashboard_Settings_v3';
+        const API_BASE_URL = 'http://localhost:5000'; // Backend API Server
+
+        const DEFAULT_SETTINGS = {
+            thresholdWarn: 80.0,       // Ngưỡng cảnh báo (cm)
+            thresholdDanger: 200.0,    // Ngưỡng nguy hiểm (cm)
+            hysteresis: 5.0,           // Độ trễ hysteresis (cm)
+            voltMin: 0.08,             // Dưới 0.08V coi như đứt dây / ngắt cảm biến
+            voltMax: 3.35,             // Trên 3.35V coi như chập mạch
+            timeoutMinutes: 10         // Quá 10 phút không có gói tin báo mất kết nối
+        };
+
+        let appSettings = loadSettings();
+
+        function loadSettings() {
+            try {
+                const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
+                if (stored) return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+            } catch (e) {
+                console.error('Lỗi nạp cấu hình settings:', e);
+            }
+            return { ...DEFAULT_SETTINGS };
+        }
+
+        function saveSettings(newSettings) {
+            appSettings = { ...appSettings, ...newSettings };
+            localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(appSettings));
+            updateThresholdLabels();
+            applyFilter();
+        }
+
+        function updateThresholdLabels() {
+            document.getElementById('lbl-warn-threshold').innerText = appSettings.thresholdWarn;
+            document.getElementById('lbl-danger-threshold').innerText = appSettings.thresholdDanger;
+        }
+
+        // Biến trạng thái máy Schmitt Trigger / Hysteresis
+        let currentAlertState = 'SAFE';
+        let isSystemLostData = false;
+        let lastRealRecord = null;
         let packetCount = 0;
-        let lastSavedTime = 0;
         let currentTopic = document.getElementById('topic-input').value;
-        let filteredRecordsCache = [];
 
-        // =====================================================================
-        // 1. KHỞI TẠO CƠ SỞ DỮ LIỆU CỤC BỘ (INDEXEDDB - RAINFALL_DB)
-        // =====================================================================
-        const DB_NAME = 'RainfallWaterDB';
-        const DB_VERSION = 1;
-        const STORE_NAME = 'measurements';
-        let dbInstance = null;
+        // Phân trang & sắp xếp
+        let currentPage = 1;
+        let pageSize = 25;
+        let totalPages = 1;
+        let sortColumn = 'received_at';
+        let sortDirection = 'desc';
 
-        function initDatabase() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(DB_NAME, DB_VERSION);
+        let historyChartInstance = null;
 
-                request.onupgradeneeded = (e) => {
-                    const db = e.target.result;
-                    if (!db.objectStoreNames.contains(STORE_NAME)) {
-                        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
-                        store.createIndex('timestamp', 'timestamp', { unique: false });
-                        store.createIndex('year', 'year', { unique: false });
-                        store.createIndex('month', 'month', { unique: false });
-                        store.createIndex('day', 'day', { unique: false });
-                        store.createIndex('hour', 'hour', { unique: false });
-                        store.createIndex('date', 'date', { unique: false });
-                    }
-                };
-
-                request.onsuccess = (e) => {
-                    dbInstance = e.target.result;
-                    updateDbCountDisplay();
-                    applyFilter(); // Tải bảng dữ liệu ban đầu
-                    resolve(dbInstance);
-                };
-
-                request.onerror = (e) => {
-                    console.error('Lỗi khởi tạo IndexedDB:', e);
-                    reject(e);
-                };
+        function formatFullDateTimeVN(epochMs) {
+            if (!epochMs || isNaN(epochMs)) return '--/--/---- --:--:--';
+            return new Date(epochMs).toLocaleString('vi-VN', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
             });
         }
 
-        // Lưu bản ghi đo mới vào IndexedDB
-        function saveRecordToDB(record) {
-            if (!dbInstance) return;
-            const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
-            const store = tx.objectStore(STORE_NAME);
-            store.add(record);
-            tx.oncomplete = () => {
-                updateDbCountDisplay();
-            };
-        }
-
-        // Đếm tổng số bản ghi trong CSDL
-        function updateDbCountDisplay() {
-            if (!dbInstance) return;
-            const tx = dbInstance.transaction(STORE_NAME, 'readonly');
-            const store = tx.objectStore(STORE_NAME);
-            const countReq = store.count();
-            countReq.onsuccess = () => {
-                const count = countReq.result;
-                document.getElementById('val-db-count').innerText = count.toLocaleString();
-            };
-        }
-
         // =====================================================================
-        // 2. KHỞI TẠO ĐỒ THỊ CHART.JS
+        // 2. THUẬT TOÁN HYSTERESIS CẢNH BÁO MỰC NƯỚC (CHỐNG NHẤP NHÁY TRẠNG THÁI)
         // =====================================================================
-        const ctx = document.getElementById('sensorChart').getContext('2d');
-        const sensorChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    {
-                        label: 'Mực nước (cm)',
-                        borderColor: '#06b6d4',
-                        backgroundColor: 'rgba(6, 182, 212, 0.15)',
-                        fill: true,
-                        data: [],
-                        borderWidth: 3,
-                        tension: 0.35,
-                        yAxisID: 'y'
-                    },
-                    {
-                        label: 'Điện áp cảm biến (V)',
-                        borderColor: '#10b981',
-                        backgroundColor: 'transparent',
-                        data: [],
-                        borderWidth: 2,
-                        borderDash: [4, 4],
-                        tension: 0.2,
-                        yAxisID: 'y1'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
-                scales: {
-                    x: {
-                        ticks: { color: '#94a3b8', font: { size: 11 } },
-                        grid: { color: '#334155' }
-                    },
-                    y: {
-                        type: 'linear',
-                        display: true,
-                        position: 'left',
-                        min: 0,
-                        suggestedMax: 100,
-                        title: { display: true, text: 'Mực nước (cm)', color: '#06b6d4', font: { weight: 'bold' } },
-                        ticks: { color: '#06b6d4' },
-                        grid: { color: '#334155' }
-                    },
-                    y1: {
-                        type: 'linear',
-                        display: true,
-                        position: 'right',
-                        min: 0,
-                        max: 3.5,
-                        title: { display: true, text: 'Điện áp (Volt)', color: '#10b981', font: { weight: 'bold' } },
-                        ticks: { color: '#10b981' },
-                        grid: { drawOnChartArea: false }
-                    }
-                },
-                plugins: {
-                    legend: { labels: { color: '#e2e8f0', font: { size: 12 } } }
-                }
+        function updateHysteresisAlertState(waterLevel, voltVal, isError) {
+            const badge = document.getElementById('water-alert-badge');
+            const sensorStatusLabel = document.getElementById('val-sensor-status-label');
+
+            // Nếu đang trong trạng thái Mất Dữ Liệu -> TUYỆT ĐỐI KHÔNG HIỆN "AN TOÀN"
+            if (isSystemLostData) {
+                badge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-600/30 text-rose-300 border border-rose-500 animate-pulse';
+                sensorStatusLabel.innerText = 'Mất dữ liệu!';
+                sensorStatusLabel.className = 'text-rose-400 text-xs font-bold';
+                return;
             }
-        });
+
+            if (isError) {
+                currentAlertState = 'SENSOR_ERROR';
+                badge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/50 animate-pulse';
+                badge.innerText = '⚠️ NGHI LỖI CẢM BIẾN';
+                sensorStatusLabel.innerText = 'Lỗi điện áp!';
+                sensorStatusLabel.className = 'text-rose-400 text-xs font-bold';
+                return;
+            }
+
+            sensorStatusLabel.innerText = 'Tốt';
+            sensorStatusLabel.className = 'text-emerald-400 text-xs font-semibold';
+
+            const Twarn = appSettings.thresholdWarn;
+            const Tdanger = appSettings.thresholdDanger;
+            const H = appSettings.hysteresis;
+
+            switch (currentAlertState) {
+                case 'SAFE':
+                case 'SENSOR_ERROR':
+                    if (waterLevel >= Tdanger) {
+                        currentAlertState = 'DANGER';
+                    } else if (waterLevel >= Twarn) {
+                        currentAlertState = 'WARNING';
+                    } else {
+                        currentAlertState = 'SAFE';
+                    }
+                    break;
+
+                case 'WARNING':
+                    if (waterLevel >= Tdanger) {
+                        currentAlertState = 'DANGER';
+                    } else if (waterLevel < (Twarn - H)) {
+                        currentAlertState = 'SAFE';
+                    }
+                    break;
+
+                case 'DANGER':
+                    if (waterLevel < (Twarn - H)) {
+                        currentAlertState = 'SAFE';
+                    } else if (waterLevel < (Tdanger - H)) {
+                        currentAlertState = 'WARNING';
+                    }
+                    break;
+            }
+
+            if (currentAlertState === 'DANGER') {
+                badge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/50 animate-pulse';
+                badge.innerText = `🚨 NGUY HIỂM: ≥ ${Tdanger} cm`;
+            } else if (currentAlertState === 'WARNING') {
+                badge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/50';
+                badge.innerText = `⚡ CẢNH BÁO: ≥ ${Twarn} cm`;
+            } else {
+                badge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+                badge.innerText = '✔ AN TOÀN';
+            }
+        }
 
         // =====================================================================
-        // 3. KẾT NỐI TỚI HIVEMQ QUA WEBSOCKET SECURE (WSS PORT 8884)
+        // 3. KIỂM TRA TRẠNG THÁI HỆ THỐNG QUA API BACKEND (PHÁT HIỆN MẤT DỮ LIỆU)
+        // =====================================================================
+        async function checkBackendStatus() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/status?timeout_min=${appSettings.timeoutMinutes}`);
+                if (!res.ok) throw new Error('API status trả về mã lỗi: ' + res.status);
+                const data = await res.json();
+
+                const backendBadge = document.getElementById('backend-status-badge');
+                backendBadge.innerText = `Backend: ${data.status}`;
+
+                if (!data.is_online) {
+                    isSystemLostData = true;
+                    backendBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse';
+
+                    const alertBadge = document.getElementById('water-alert-badge');
+                    alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-600/30 text-rose-300 border border-rose-500 animate-pulse';
+                    alertBadge.innerText = `⚠️ MẤT DỮ LIỆU (Lần cuối nhận: ${data.last_received_str})`;
+
+                    document.getElementById('val-sensor-status-label').innerText = 'Mất dữ liệu!';
+                    document.getElementById('val-sensor-status-label').className = 'text-rose-400 text-xs font-bold';
+                } else {
+                    isSystemLostData = false;
+                    backendBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+                }
+
+                if (data.last_received_str) {
+                    document.getElementById('last-update').innerText = 'Cập nhật: ' + data.last_received_str;
+                }
+
+                // Cập nhật thẻ Live từ mẫu mới nhất của backend nếu có
+                if (data.latest_measurement && isSystemLostData) {
+                    document.getElementById('val-level').innerText = data.latest_measurement.level_cm.toFixed(1);
+                    document.getElementById('val-level-m').innerText = (data.latest_measurement.level_cm / 100.0).toFixed(2);
+                    document.getElementById('val-volt').innerText = data.latest_measurement.volt.toFixed(2);
+                    document.getElementById('val-pressure').innerText = data.latest_measurement.press_bar.toFixed(3);
+                    document.getElementById('val-percent').innerText = data.latest_measurement.percent.toFixed(1);
+                    document.getElementById('bar-water').style.width = data.latest_measurement.percent + '%';
+                }
+
+            } catch (e) {
+                const backendBadge = document.getElementById('backend-status-badge');
+                backendBadge.innerText = 'Backend: Mất kết nối API (Chưa bật service.py)';
+                backendBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-rose-900/40 text-rose-400 border border-rose-700/50';
+            }
+        }
+
+        // Định kỳ kiểm tra trạng thái mỗi 3 giây
+        setInterval(checkBackendStatus, 3000);
+
+        // =====================================================================
+        // 4. KẾT NỐI MQTT LIVE WEBSOCKET (CHỈ HIỂN THỊ TRỰC QUAN, KHÔNG LƯU INDEXEDDB)
         // =====================================================================
         const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
-            clientId: 'water_monitor_' + Math.random().toString(16).substr(2, 8)
+            clientId: 'dashboard_viewer_' + Math.random().toString(16).substr(2, 8)
         });
 
         const statusBadge = document.getElementById('status-badge');
-        const alertBadge = document.getElementById('water-alert-badge');
 
         client.on('connect', () => {
-            statusBadge.innerText = '● Đã kết nối Cloud Broker';
-            statusBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
-            client.subscribe(currentTopic, (err) => {
-                if (!err) {
-                    addLog(`[SYSTEM] Đã đăng ký lắng nghe topic: ${currentTopic}`);
-                }
-            });
+            statusBadge.innerText = '● Đã kết nối';
+            statusBadge.className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+            client.subscribe(currentTopic);
         });
 
         client.on('offline', () => {
-            statusBadge.innerText = '○ Mất kết nối Cloud';
-            statusBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30';
+            statusBadge.innerText = '○ Mất kết nối';
+            statusBadge.className = 'px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30';
         });
 
-        // =====================================================================
-        // 4. LẮNG NGHE & XỬ LÝ GÓI TIN JSON TỪ ESP32-C3
-        // =====================================================================
         client.on('message', (topic, message) => {
             const rawStr = message.toString();
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString();
-            document.getElementById('last-update').innerText = 'Cập nhật: ' + timeStr;
-
+            const nowEpoch = Date.now();
+            const timeStr = formatFullDateTimeVN(nowEpoch);
             packetCount++;
-            document.getElementById('val-count').innerText = packetCount;
-            addLog(`[${timeStr}] Topic: ${topic} ➜ ${rawStr}`);
+            document.getElementById('val-count').innerText = packetCount.toLocaleString();
 
             try {
                 const data = JSON.parse(rawStr);
+                let waterLevel = data.level !== undefined ? parseFloat(data.level) : 0.0;
+                let voltVal = data.volt !== undefined ? parseFloat(data.volt) : 0.0;
+                const isVoltageError = (voltVal < appSettings.voltMin || voltVal > appSettings.voltMax);
 
-                // --- 1. TÍNH TOÁN MỰC NƯỚC (CM) ---
-                let waterLevel = 0.0;
-                if (data.level !== undefined) {
-                    waterLevel = parseFloat(data.level);
-                } else if (data.percent !== undefined) {
-                    waterLevel = (parseFloat(data.percent) / 100.0) * 500.0;
-                } else if (data.volt !== undefined) {
-                    let vEff = Math.max(0, parseFloat(data.volt) - 0.10);
-                    waterLevel = (vEff / (3.3 - 0.10)) * 500.0;
+                let rateCmPerHour = 0.0;
+                if (lastRealRecord && !isVoltageError) {
+                    const dtSec = (nowEpoch - lastRealRecord.timestamp) / 1000.0;
+                    if (dtSec >= 1.0) {
+                        rateCmPerHour = ((waterLevel - lastRealRecord.level) / dtSec) * 3600.0;
+                    }
+                }
+                if (!isVoltageError) {
+                    lastRealRecord = { timestamp: nowEpoch, level: waterLevel };
                 }
 
-                // Cập nhật giao diện mức nước (cm) và lượng mưa quy đổi (mm)
+                updateHysteresisAlertState(waterLevel, voltVal, isVoltageError);
+
+                let percent = Math.min(100, Math.max(0, (waterLevel / 500.0) * 100.0));
+                let pressureBar = waterLevel / 1019.72;
+
                 document.getElementById('val-level').innerText = waterLevel.toFixed(1);
-                document.getElementById('val-rain-mm').innerText = (waterLevel * 10.0).toFixed(1);
                 document.getElementById('val-level-m').innerText = (waterLevel / 100.0).toFixed(2);
-
-                // --- 2. TỶ LỆ DÂNG NƯỚC (%) ---
-                let percent = 0.0;
-                if (data.percent !== undefined) {
-                    percent = parseFloat(data.percent);
-                } else {
-                    percent = (waterLevel / 500.0) * 100.0;
-                }
-                percent = Math.min(100, Math.max(0, percent));
+                document.getElementById('val-rate-cm-h').innerText = (rateCmPerHour >= 0 ? '+' : '') + rateCmPerHour.toFixed(1);
                 document.getElementById('val-percent').innerText = percent.toFixed(1);
                 document.getElementById('bar-water').style.width = percent + '%';
-
-                // --- 3. ĐIỆN ÁP & RAW ADC ---
-                let voltVal = 0.0;
-                if (data.volt !== undefined) {
-                    voltVal = parseFloat(data.volt);
-                    document.getElementById('val-volt').innerText = voltVal.toFixed(2);
-                }
-                let rawVal = data.raw !== undefined ? parseInt(data.raw) : 0;
-                document.getElementById('val-raw').innerText = rawVal;
-
-                // --- 4. ÁP SUẤT THỦY TĨNH (BAR) ---
-                let pressureBar = 0.0;
-                if (data.press !== undefined) {
-                    pressureBar = parseFloat(data.press);
-                } else {
-                    pressureBar = waterLevel / 1019.72;
-                }
                 document.getElementById('val-pressure').innerText = pressureBar.toFixed(3);
+                document.getElementById('val-volt').innerText = voltVal.toFixed(2);
 
-                // --- 5. ĐÁNH GIÁ MỨC ĐỘ CẢNH BÁO ---
-                if (waterLevel >= 400.0) {
-                    alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/50 animate-pulse';
-                    alertBadge.innerText = '🚨 BÁO ĐỘNG ĐỎ: NGẬP NGUY HIỂM';
-                } else if (waterLevel >= 250.0) {
-                    alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/50';
-                    alertBadge.innerText = '⚡ CẢNH BÁO: MỨC NƯỚC CAO';
-                } else {
-                    alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
-                    alertBadge.innerText = '✔ AN TOÀN / BÌNH THƯỜNG';
-                }
-
-                // --- 6. CẬP NHẬT BIỂU ĐỒ THỜI GIAN THỰC (GIỮ 30 ĐIỂM) ---
+                // Cập nhật biểu đồ live 30 điểm
+                const shortTime = new Date(nowEpoch).toLocaleTimeString('vi-VN', { hour12: false });
                 if (sensorChart.data.labels.length > 30) {
                     sensorChart.data.labels.shift();
                     sensorChart.data.datasets[0].data.shift();
                     sensorChart.data.datasets[1].data.shift();
                 }
-                sensorChart.data.labels.push(timeStr);
-                sensorChart.data.datasets[0].data.push(waterLevel);
+                sensorChart.data.labels.push(shortTime);
+                sensorChart.data.datasets[0].data.push(isVoltageError ? null : waterLevel);
                 sensorChart.data.datasets[1].data.push(voltVal);
                 sensorChart.update();
 
-                // --- 7. TỰ ĐỘNG LƯU VÀO CƠ SỞ DỮ LIỆU INDEXEDDB ---
-                const autoSaveEnabled = document.getElementById('auto-save-toggle').checked;
-                const intervalLimit = parseInt(document.getElementById('log-interval').value);
-                const currentTimeMs = Date.now();
-
-                if (autoSaveEnabled && (currentTimeMs - lastSavedTime >= intervalLimit)) {
-                    lastSavedTime = currentTimeMs;
-
-                    const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-                    const record = {
-                        timestamp: now.toISOString(),
-                        datetime_str: now.getFullYear() + '-' + 
-                                      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                                      String(now.getDate()).padStart(2, '0') + ' ' + 
-                                      String(now.getHours()).padStart(2, '0') + ':' + 
-                                      String(now.getMinutes()).padStart(2, '0') + ':' + 
-                                      String(now.getSeconds()).padStart(2, '0'),
-                        year: now.getFullYear(),
-                        month: now.getMonth() + 1,
-                        day: now.getDate(),
-                        hour: now.getHours(),
-                        minute: now.getMinutes(),
-                        second: now.getSeconds(),
-                        date: dateStr,
-                        level: parseFloat(waterLevel.toFixed(1)),
-                        rain_mm: parseFloat((waterLevel * 10.0).toFixed(1)),
-                        volt: parseFloat(voltVal.toFixed(2)),
-                        percent: parseFloat(percent.toFixed(1)),
-                        press: parseFloat(pressureBar.toFixed(3)),
-                        raw: rawVal
-                    };
-
-                    saveRecordToDB(record);
-                }
+                // LƯU Ý QUAN TRỌNG: Browser KHÔNG ghi vào IndexedDB nữa!
+                // Toàn bộ dữ liệu được Backend Service service.py tự động thu thập và ghi vào SQLite 24/7.
 
             } catch (e) {
-                addLog(`[LỖI PARSE JSON] Gói tin không đúng cú pháp: ${e.message}`);
+                addLog(`[LỖI PARSE JSON] Gói tin không hợp lệ: ${e.message}`);
             }
         });
 
         // =====================================================================
-        // 5. BỘ LỌC TRUY VẤN VÀ THỐNG KÊ SỐ LIỆU
+        // 5. TRUY VẤN DỮ LIỆU TỪ BACKEND API (BẢNG, THỐNG KÊ, BIỂU ĐỒ)
         // =====================================================================
-        function applyFilter() {
-            if (!dbInstance) return;
-
+        async function applyFilter() {
+            const selSource = document.getElementById('filter-source').value;
             const selYear = document.getElementById('filter-year').value;
             const selMonth = document.getElementById('filter-month').value;
-            const selDate = document.getElementById('filter-date').value;
+            const selDateStr = document.getElementById('filter-date').value.trim();
             const hourStart = parseInt(document.getElementById('filter-hour-start').value);
             const hourEnd = parseInt(document.getElementById('filter-hour-end').value);
 
-            const tx = dbInstance.transaction(STORE_NAME, 'readonly');
-            const store = tx.objectStore(STORE_NAME);
-            const request = store.getAll();
+            let includeSim = (selSource === 'ALL' || selSource === 'SIMULATED') ? 1 : 0;
 
-            request.onsuccess = () => {
-                const allRecords = request.result || [];
-                
-                // Lọc theo các tiêu chí đã chọn
-                filteredRecordsCache = allRecords.filter(r => {
-                    if (selYear !== 'ALL' && r.year !== parseInt(selYear)) return false;
-                    if (selMonth !== 'ALL' && r.month !== parseInt(selMonth)) return false;
-                    if (selDate && r.date !== selDate) return false;
-                    if (r.hour < hourStart || r.hour > hourEnd) return false;
-                    return true;
-                });
+            // Tính toán khoảng thời gian from_ts, to_ts (UTC ms)
+            let from_ts = null;
+            let to_ts = null;
 
-                // Cập nhật thẻ thống kê
-                updateSummaryStatistics(filteredRecordsCache);
+            if (selDateStr) {
+                const parts = selDateStr.split('/');
+                if (parts.length === 3) {
+                    const day = parseInt(parts[0]);
+                    const month = parseInt(parts[1]) - 1;
+                    const year = parseInt(parts[2]);
+                    const dStart = new Date(year, month, day, hourStart, 0, 0);
+                    const dEnd = new Date(year, month, day, hourEnd, 59, 59);
+                    from_ts = dStart.getTime();
+                    to_ts = dEnd.getTime();
+                }
+            } else if (selYear !== 'ALL' || selMonth !== 'ALL') {
+                const year = selYear !== 'ALL' ? parseInt(selYear) : new Date().getFullYear();
+                const mStart = selMonth !== 'ALL' ? parseInt(selMonth) - 1 : 0;
+                const mEnd = selMonth !== 'ALL' ? parseInt(selMonth) - 1 : 11;
+                from_ts = new Date(year, mStart, 1, 0, 0, 0).getTime();
+                to_ts = new Date(year, mEnd + 1, 0, 23, 59, 59).getTime();
+            }
 
-                // Cập nhật bảng xem trước
-                renderPreviewTable(filteredRecordsCache);
-            };
+            const queryParams = new URLSearchParams();
+            if (from_ts) queryParams.append('from', from_ts);
+            if (to_ts) queryParams.append('to', to_ts);
+            queryParams.append('include_simulated', includeSim);
+
+            // 1. Gọi API /api/stats để nạp thẻ thống kê
+            try {
+                const statParams = new URLSearchParams(queryParams);
+                statParams.append('volt_min', appSettings.voltMin);
+                statParams.append('volt_max', appSettings.voltMax);
+                const resStats = await fetch(`${API_BASE_URL}/api/stats?${statParams.toString()}`);
+                if (resStats.ok) {
+                    const stats = await resStats.json();
+                    document.getElementById('stat-count').innerText = stats.total_samples.toLocaleString();
+                    document.getElementById('stat-avg').innerHTML = `${stats.avg_level_cm.toFixed(1)} <span class="text-xs font-normal">cm</span>`;
+                    document.getElementById('stat-max').innerHTML = `${stats.max_level_cm.toFixed(1)} <span class="text-xs font-normal">cm</span>`;
+                    document.getElementById('stat-max-time').innerText = 'Lúc: ' + stats.max_time_str;
+                    document.getElementById('stat-min').innerHTML = `${stats.min_level_cm.toFixed(1)} <span class="text-xs font-normal">cm</span>`;
+                    document.getElementById('stat-min-time').innerText = 'Lúc: ' + stats.min_time_str;
+
+                    const errBadge = document.getElementById('stat-error-excluded-badge');
+                    if (stats.error_samples > 0) {
+                        errBadge.innerText = `⚠️ Đã loại trừ ${stats.error_samples} mẫu lỗi`;
+                        errBadge.classList.remove('hidden');
+                    } else {
+                        errBadge.classList.add('hidden');
+                    }
+                }
+            } catch (e) {
+                console.error('Lỗi nạp thống kê:', e);
+            }
+
+            // 2. Gọi API /api/series để cập nhật biểu đồ lịch sử (kèm ngắt gap)
+            try {
+                const resSeries = await fetch(`${API_BASE_URL}/api/series?${queryParams.toString()}`);
+                if (resSeries.ok) {
+                    const seriesData = await resSeries.json();
+                    updateHistoryChartWithSeries(seriesData);
+                }
+            } catch (e) {
+                console.error('Lỗi nạp biểu đồ:', e);
+            }
+
+            // 3. Gọi API /api/measurements để nạp dữ liệu bảng phân trang
+            try {
+                const tableParams = new URLSearchParams(queryParams);
+                tableParams.append('limit', pageSize);
+                tableParams.append('offset', (currentPage - 1) * pageSize);
+                tableParams.append('sort', sortDirection);
+
+                const resTable = await fetch(`${API_BASE_URL}/api/measurements?${tableParams.toString()}`);
+                if (resTable.ok) {
+                    const tableData = await resTable.json();
+                    renderTableRows(tableData.data, tableData.offset);
+                    updatePaginationControls(tableData.total, tableData.offset, tableData.data.length);
+                    document.getElementById('db-count-badge').innerText = `${tableData.total.toLocaleString()} mẫu`;
+                }
+            } catch (e) {
+                console.error('Lỗi nạp bảng:', e);
+            }
         }
 
         function resetFilter() {
-            document.getElementById('filter-year').value = '2026';
+            document.getElementById('filter-source').value = 'REAL';
+            document.getElementById('filter-year').value = 'ALL';
             document.getElementById('filter-month').value = 'ALL';
             document.getElementById('filter-date').value = '';
             document.getElementById('filter-hour-start').value = '0';
             document.getElementById('filter-hour-end').value = '23';
+            currentPage = 1;
             applyFilter();
         }
 
-        function updateSummaryStatistics(records) {
-            const count = records.length;
-            document.getElementById('stat-count').innerText = count.toLocaleString();
+        // =====================================================================
+        // 6. CẬP NHẬT BIỂU ĐỒ LỊCH SỬ TỪ API (HỖ TRỢ NGẮT LINE TẠI GAP)
+        // =====================================================================
+        function updateHistoryChartWithSeries(seriesData) {
+            if (!historyChartInstance) return;
 
-            if (count === 0) {
-                document.getElementById('stat-avg').innerHTML = '0.0 <span class="text-xs font-normal">cm</span>';
-                document.getElementById('stat-avg-mm').innerText = '0.0 mm';
-                document.getElementById('stat-max').innerHTML = '0.0 <span class="text-xs font-normal">cm</span>';
-                document.getElementById('stat-max-time').innerText = 'Thời điểm: --:--';
-                document.getElementById('stat-min').innerHTML = '0.0 <span class="text-xs font-normal">cm</span>';
-                document.getElementById('stat-min-time').innerText = 'Thời điểm: --:--';
+            const badge = document.getElementById('chart-downsample-badge');
+            historyChartInstance.data.datasets[1].label = `Ngưỡng cảnh báo (${appSettings.thresholdWarn} cm)`;
+            historyChartInstance.data.datasets[2].label = `Nguy hiểm (${appSettings.thresholdDanger} cm)`;
+
+            if (!seriesData.labels || seriesData.labels.length === 0) {
+                historyChartInstance.data.labels = [];
+                historyChartInstance.data.datasets[0].data = [];
+                historyChartInstance.data.datasets[1].data = [];
+                historyChartInstance.data.datasets[2].data = [];
+                historyChartInstance.update();
+                badge.classList.add('hidden');
                 return;
             }
 
-            let sum = 0;
-            let maxRec = records[0];
-            let minRec = records[0];
+            if (seriesData.total_points > 1500) {
+                badge.innerText = `⚡ Downsampled: ${seriesData.total_points} ➜ ${seriesData.labels.length} điểm`;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
 
-            records.forEach(r => {
-                sum += r.level;
-                if (r.level > maxRec.level) maxRec = r;
-                if (r.level < minRec.level) minRec = r;
-            });
+            historyChartInstance.data.labels = seriesData.labels;
+            historyChartInstance.data.datasets[0].data = seriesData.levels;
 
-            const avg = sum / count;
-            document.getElementById('stat-avg').innerHTML = avg.toFixed(1) + ' <span class="text-xs font-normal">cm</span>';
-            document.getElementById('stat-avg-mm').innerText = (avg * 10.0).toFixed(1) + ' mm';
-            document.getElementById('stat-max').innerHTML = maxRec.level.toFixed(1) + ' <span class="text-xs font-normal">cm</span>';
-            document.getElementById('stat-max-time').innerText = 'Lúc: ' + (maxRec.datetime_str ? maxRec.datetime_str.split(' ')[1] : '--');
-            document.getElementById('stat-min').innerHTML = minRec.level.toFixed(1) + ' <span class="text-xs font-normal">cm</span>';
-            document.getElementById('stat-min-time').innerText = 'Lúc: ' + (minRec.datetime_str ? minRec.datetime_str.split(' ')[1] : '--');
+            // Đường ngưỡng Cảnh báo & Nguy hiểm
+            historyChartInstance.data.datasets[1].data = new Array(seriesData.labels.length).fill(appSettings.thresholdWarn);
+            historyChartInstance.data.datasets[2].data = new Array(seriesData.labels.length).fill(appSettings.thresholdDanger);
+
+            historyChartInstance.update();
         }
 
-        function renderPreviewTable(records) {
+        // =====================================================================
+        // 7. BẢNG DỮ LIỆU & PHÂN TRANG TỪ API
+        // =====================================================================
+        function sortTable(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'desc';
+            }
+            currentPage = 1;
+            applyFilter();
+        }
+
+        function renderTableRows(pageData, startIndex) {
             const tbody = document.getElementById('preview-tbody');
-            if (records.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-500">Không tìm thấy bản ghi nào phù hợp với bộ lọc hiện tại.</td></tr>`;
+            if (!pageData || pageData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-500">Không có bản ghi nào phù hợp với bộ lọc hiện tại.</td></tr>`;
                 return;
             }
 
-            // Hiển thị 15 bản ghi mới nhất
-            const displayList = records.slice(-15).reverse();
             let html = '';
+            pageData.forEach((r, idx) => {
+                let rateBadge = `<span class="text-slate-400 font-mono">0.0</span>`;
+                if (r.rate_cm_h > 0) {
+                    rateBadge = `<span class="text-rose-400 font-mono font-semibold">+${r.rate_cm_h.toFixed(1)} ↑</span>`;
+                } else if (r.rate_cm_h < 0) {
+                    rateBadge = `<span class="text-emerald-400 font-mono font-semibold">${r.rate_cm_h.toFixed(1)} ↓</span>`;
+                }
 
-            displayList.forEach((r, idx) => {
-                let statusBadge = '<span class="text-emerald-400 font-semibold">An toàn</span>';
-                if (r.level >= 400) statusBadge = '<span class="text-rose-400 font-bold">Nguy hiểm</span>';
-                else if (r.level >= 250) statusBadge = '<span class="text-amber-400 font-bold">Mức cao</span>';
+                const isError = (r.volt < appSettings.voltMin || r.volt > appSettings.voltMax);
+                let statusBadge = '';
+                if (isError) {
+                    statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">⚠️ Lỗi (${r.volt}V)</span>`;
+                } else if (r.is_simulated) {
+                    statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Giả lập</span>`;
+                } else {
+                    statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Hợp lệ</span>`;
+                }
 
                 html += `
-                    <tr class="hover:bg-slate-800/60 transition">
-                        <td class="px-4 py-2.5 font-mono text-slate-500">${idx + 1}</td>
-                        <td class="px-4 py-2.5 font-mono text-cyan-300">${r.datetime_str || r.timestamp}</td>
-                        <td class="px-4 py-2.5 text-right font-bold text-white">${r.level.toFixed(1)}</td>
-                        <td class="px-4 py-2.5 text-right font-bold text-cyan-400">${r.rain_mm ? r.rain_mm.toFixed(1) : (r.level * 10).toFixed(1)}</td>
-                        <td class="px-4 py-2.5 text-right font-mono text-slate-300">${r.volt.toFixed(2)}</td>
-                        <td class="px-4 py-2.5 text-right font-mono text-emerald-400">${r.press.toFixed(3)}</td>
-                        <td class="px-4 py-2.5 text-center font-mono text-blue-400">${r.percent.toFixed(1)}%</td>
-                        <td class="px-4 py-2.5 text-center">${statusBadge}</td>
+                    <tr class="hover:bg-slate-800/60 transition ${isError ? 'bg-rose-950/20' : ''}">
+                        <td class="px-3.5 py-2.5 font-mono text-slate-500">${startIndex + idx + 1}</td>
+                        <td class="px-3.5 py-2.5 font-mono text-cyan-300 whitespace-nowrap">${r.datetime_str}</td>
+                        <td class="px-3.5 py-2.5 text-right font-bold text-white font-mono">${r.level_cm.toFixed(1)}</td>
+                        <td class="px-3.5 py-2.5 text-right font-mono">${rateBadge}</td>
+                        <td class="px-3.5 py-2.5 text-right font-mono ${isError ? 'text-rose-400 font-bold' : 'text-slate-300'}">${r.volt.toFixed(2)}</td>
+                        <td class="px-3.5 py-2.5 text-right font-mono text-emerald-400">${r.press_bar.toFixed(3)}</td>
+                        <td class="px-3.5 py-2.5 text-center font-mono text-blue-400">${r.percent.toFixed(1)}%</td>
+                        <td class="px-3.5 py-2.5 text-center">${statusBadge}</td>
                     </tr>
                 `;
             });
@@ -779,228 +1070,223 @@
             tbody.innerHTML = html;
         }
 
+        function updatePaginationControls(total, startIndex, countOnPage) {
+            totalPages = Math.max(1, Math.ceil(total / pageSize));
+            document.getElementById('page-indicator').innerText = `${currentPage} / ${totalPages}`;
+            document.getElementById('pagination-summary').innerText = `(Hiển thị ${total === 0 ? 0 : startIndex + 1}-${startIndex + countOnPage} / Tổng ${total.toLocaleString()} dòng)`;
+
+            document.getElementById('btn-page-first').disabled = (currentPage === 1);
+            document.getElementById('btn-page-prev').disabled = (currentPage === 1);
+            document.getElementById('btn-page-next').disabled = (currentPage === totalPages);
+            document.getElementById('btn-page-last').disabled = (currentPage === totalPages);
+        }
+
+        function goToPage(page) {
+            if (page >= 1 && page <= totalPages) {
+                currentPage = page;
+                applyFilter();
+            }
+        }
+
+        function changePageSize(size) {
+            pageSize = parseInt(size);
+            currentPage = 1;
+            applyFilter();
+        }
+
         // =====================================================================
-        // 6. XUẤT FILE BÁO CÁO EXCEL (.XLSX) CHUẨN NHIỀU SHEET CHO NGHIÊN CỨU
+        // 8. XUẤT BÁO CÁO QUA API BACKEND (EXCEL MULTI-SHEET & CSV BOM UTF-8)
         // =====================================================================
         function exportToExcel() {
-            if (!filteredRecordsCache || filteredRecordsCache.length === 0) {
-                alert('Không có dữ liệu nào trong bộ lọc hiện tại để xuất Excel! Vui lòng kiểm tra lại bộ lọc hoặc nhận thêm dữ liệu.');
-                return;
-            }
-
-            // --- SHEET 1: DỮ LIỆU CHI TIẾT (RAW DATA) ---
-            const rawRows = filteredRecordsCache.map((r, i) => ({
-                "STT": i + 1,
-                "Thời Gian Đo": r.datetime_str || r.timestamp,
-                "Năm": r.year,
-                "Tháng": r.month,
-                "Ngày": r.day,
-                "Giờ": r.hour,
-                "Phút": r.minute,
-                "Giây": r.second,
-                "Mực Nước (cm)": r.level,
-                "Lượng Mưa Quy Đổi (mm)": r.rain_mm || (r.level * 10),
-                "Điện Áp Cảm Biến (V)": r.volt,
-                "Áp Suất Thủy Tĩnh (Bar)": r.press,
-                "Tỷ Lệ Chiều Cao (%)": r.percent,
-                "ADC Raw (12-bit)": r.raw
-            }));
-            const wsRaw = XLSX.utils.json_to_sheet(rawRows);
-
-            // --- SHEET 2: TỔNG HỢP THEO TỪNG GIỜ (HOURLY SUMMARY) ---
-            const hourlyMap = {};
-            filteredRecordsCache.forEach(r => {
-                const key = `${r.date} Giờ ${String(r.hour).padStart(2, '0')}:00`;
-                if (!hourlyMap[key]) {
-                    hourlyMap[key] = { date: r.date, hour: r.hour, count: 0, sumLevel: 0, maxLevel: r.level, minLevel: r.level };
-                }
-                const h = hourlyMap[key];
-                h.count++;
-                h.sumLevel += r.level;
-                if (r.level > h.maxLevel) h.maxLevel = r.level;
-                if (r.level < h.minLevel) h.minLevel = r.level;
-            });
-
-            const hourlyRows = Object.keys(hourlyMap).sort().map(key => {
-                const h = hourlyMap[key];
-                const avgLevel = h.sumLevel / h.count;
-                return {
-                    "Mốc Thời Gian": key,
-                    "Ngày": h.date,
-                    "Khung Giờ": `${String(h.hour).padStart(2, '0')}:00 - ${String(h.hour).padStart(2, '0')}:59`,
-                    "Số Lượng Mẫu Đo": h.count,
-                    "Mực Nước TB (cm)": parseFloat(avgLevel.toFixed(2)),
-                    "Lượng Mưa TB (mm)": parseFloat((avgLevel * 10).toFixed(2)),
-                    "Mực Nước Đỉnh Max (cm)": parseFloat(h.maxLevel.toFixed(2)),
-                    "Mực Nước Thấp Nhất Min (cm)": parseFloat(h.minLevel.toFixed(2)),
-                    "Biến Thiên Dâng Nước (cm)": parseFloat((h.maxLevel - h.minLevel).toFixed(2))
-                };
-            });
-            const wsHourly = XLSX.utils.json_to_sheet(hourlyRows);
-
-            // --- SHEET 3: TỔNG HỢP THEO TỪNG NGÀY (DAILY SUMMARY) ---
-            const dailyMap = {};
-            filteredRecordsCache.forEach(r => {
-                const key = r.date;
-                if (!dailyMap[key]) {
-                    dailyMap[key] = { date: r.date, year: r.year, month: r.month, day: r.day, count: 0, sumLevel: 0, maxLevel: r.level, minLevel: r.level };
-                }
-                const d = dailyMap[key];
-                d.count++;
-                d.sumLevel += r.level;
-                if (r.level > d.maxLevel) d.maxLevel = r.level;
-                if (r.level < d.minLevel) d.minLevel = r.level;
-            });
-
-            const dailyRows = Object.keys(dailyMap).sort().map(key => {
-                const d = dailyMap[key];
-                const avgLevel = d.sumLevel / d.count;
-                return {
-                    "Ngày Đo": d.date,
-                    "Năm": d.year,
-                    "Tháng": d.month,
-                    "Ngày": d.day,
-                    "Tổng Số Mẫu Trong Ngày": d.count,
-                    "Mực Nước Trung Bình Ngày (cm)": parseFloat(avgLevel.toFixed(2)),
-                    "Lượng Mưa TB Ngày (mm)": parseFloat((avgLevel * 10).toFixed(2)),
-                    "Mực Nước Đỉnh Ngày (Max cm)": parseFloat(d.maxLevel.toFixed(2)),
-                    "Mực Nước Đáy Ngày (Min cm)": parseFloat(d.minLevel.toFixed(2)),
-                    "Chênh Lệch Biên Độ Nước (cm)": parseFloat((d.maxLevel - d.minLevel).toFixed(2))
-                };
-            });
-            const wsDaily = XLSX.utils.json_to_sheet(dailyRows);
-
-            // --- SHEET 4: TỔNG HỢP THEO NĂM & THÁNG (YEARLY/MONTHLY) ---
-            const monthlyMap = {};
-            filteredRecordsCache.forEach(r => {
-                const key = `${r.year}-Tháng ${String(r.month).padStart(2, '0')}`;
-                if (!monthlyMap[key]) {
-                    monthlyMap[key] = { year: r.year, month: r.month, count: 0, sumLevel: 0, maxLevel: r.level, minLevel: r.level };
-                }
-                const m = monthlyMap[key];
-                m.count++;
-                m.sumLevel += r.level;
-                if (r.level > m.maxLevel) m.maxLevel = r.level;
-                if (r.level < m.minLevel) m.minLevel = r.level;
-            });
-
-            const monthlyRows = Object.keys(monthlyMap).sort().map(key => {
-                const m = monthlyMap[key];
-                const avgLevel = m.sumLevel / m.count;
-                return {
-                    "Năm - Tháng": key,
-                    "Năm": m.year,
-                    "Tháng": m.month,
-                    "Tổng Mẫu Thu Thập": m.count,
-                    "Mực Nước TB Tháng (cm)": parseFloat(avgLevel.toFixed(2)),
-                    "Lượng Mưa TB Tháng (mm)": parseFloat((avgLevel * 10).toFixed(2)),
-                    "Đỉnh Nước Cao Nhất Trong Tháng (cm)": parseFloat(m.maxLevel.toFixed(2))
-                };
-            });
-            const wsMonthly = XLSX.utils.json_to_sheet(monthlyRows);
-
-            // TẠO WORKBOOK VÀ GẮN CÁC SHEET VÀO
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, wsRaw, "Du_Lieu_Chi_Tiet");
-            XLSX.utils.book_append_sheet(wb, wsHourly, "Tong_Hop_Theo_Gio");
-            XLSX.utils.book_append_sheet(wb, wsDaily, "Tong_Hop_Theo_Ngay");
-            XLSX.utils.book_append_sheet(wb, wsMonthly, "Tong_Hop_Theo_Nam");
-
-            // Tên file xuất theo thời gian thực
-            const now = new Date();
-            const filename = `Bao_Cao_Luong_Mua_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.xlsx`;
-
-            // Kích hoạt download
-            XLSX.writeFile(wb, filename);
-            addLog(`[EXCEL] Đã xuất file thành công: ${filename} (${filteredRecordsCache.length} dòng số liệu)`);
+            const selSource = document.getElementById('filter-source').value;
+            const incSim = (selSource === 'ALL' || selSource === 'SIMULATED') ? 1 : 0;
+            window.location.href = `${API_BASE_URL}/api/export.xlsx?include_simulated=${incSim}`;
+            addLog('[EXCEL] Đã kích hoạt tải về file Báo Cáo Mực Nước Thủy Văn (.xlsx) từ Backend');
         }
 
-        // Xuất file CSV nhanh
         function exportToCSV() {
-            if (!filteredRecordsCache || filteredRecordsCache.length === 0) {
-                alert('Không có dữ liệu để xuất CSV!');
-                return;
-            }
-            const rawRows = filteredRecordsCache.map((r, i) => ({
-                "STT": i + 1,
-                "ThoiGian": r.datetime_str || r.timestamp,
-                "Nam": r.year,
-                "Thang": r.month,
-                "Ngay": r.day,
-                "Gio": r.hour,
-                "MucNuoc_cm": r.level,
-                "LuongMua_mm": r.rain_mm || (r.level * 10),
-                "DienAp_V": r.volt,
-                "ApSuat_bar": r.press
-            }));
-            const ws = XLSX.utils.json_to_sheet(rawRows);
-            const csv = XLSX.utils.sheet_to_csv(ws);
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = `Du_Lieu_Luong_Mua_${Date.now()}.csv`;
-            link.click();
+            const selSource = document.getElementById('filter-source').value;
+            const incSim = (selSource === 'ALL' || selSource === 'SIMULATED') ? 1 : 0;
+            window.location.href = `${API_BASE_URL}/api/export.csv?include_simulated=${incSim}`;
+            addLog('[CSV] Đã kích hoạt tải về file CSV UTF-8 BOM từ Backend');
         }
 
         // =====================================================================
-        // 7. CÔNG CỤ TẠO DỮ LIỆU TEST & QUẢN TRỊ CSDL
+        // 9. NÚT THỬ NGHIỆM (+50 MẪU) GỌI API BACKEND
         // =====================================================================
-        function generateSampleData() {
-            const now = new Date();
-            const records = [];
-            for (let i = 49; i >= 0; i--) {
-                const sampleTime = new Date(now.getTime() - i * 3 * 60 * 1000); // lùi mỗi lần 3 phút
-                const level = Math.max(10.0, Math.min(450.0, 50.0 + Math.sin(i / 5.0) * 40.0 + (Math.random() * 8.0)));
-                const volt = 0.10 + (level / 500.0) * (3.3 - 0.10);
-                const press = level / 1019.72;
-                const percent = (level / 500.0) * 100.0;
-
-                records.push({
-                    timestamp: sampleTime.toISOString(),
-                    datetime_str: sampleTime.getFullYear() + '-' + 
-                                  String(sampleTime.getMonth() + 1).padStart(2, '0') + '-' + 
-                                  String(sampleTime.getDate()).padStart(2, '0') + ' ' + 
-                                  String(sampleTime.getHours()).padStart(2, '0') + ':' + 
-                                  String(sampleTime.getMinutes()).padStart(2, '0') + ':' + 
-                                  String(sampleTime.getSeconds()).padStart(2, '0'),
-                    year: sampleTime.getFullYear(),
-                    month: sampleTime.getMonth() + 1,
-                    day: sampleTime.getDate(),
-                    hour: sampleTime.getHours(),
-                    minute: sampleTime.getMinutes(),
-                    second: sampleTime.getSeconds(),
-                    date: sampleTime.toISOString().split('T')[0],
-                    level: parseFloat(level.toFixed(1)),
-                    rain_mm: parseFloat((level * 10.0).toFixed(1)),
-                    volt: parseFloat(volt.toFixed(2)),
-                    percent: parseFloat(percent.toFixed(1)),
-                    press: parseFloat(press.toFixed(3)),
-                    raw: Math.round((volt / 3.3) * 4095)
+        async function generateSampleData() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/simulate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ count: 50 })
                 });
+                const data = await res.json();
+                if (data.success) {
+                    addLog(`[THỬ NGHIỆM] Đã tạo thành công 50 mẫu giả lập vào SQLite Backend!`);
+                    applyFilter();
+                } else {
+                    alert('Lỗi tạo mẫu thử nghiệm: ' + data.message);
+                }
+            } catch (e) {
+                alert('Không thể kết nối tới Backend API service.py!');
             }
-
-            const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
-            const store = tx.objectStore(STORE_NAME);
-            records.forEach(r => store.add(r));
-            tx.oncomplete = () => {
-                updateDbCountDisplay();
-                applyFilter();
-                addLog(`[TEST DATA] Đã tạo thành công 50 mẫu số liệu mô phỏng theo giờ/ngày!`);
-            };
         }
 
-        function clearDatabase() {
-            if (!confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử dữ liệu đã lưu trong CSDL trình duyệt không?')) {
-                return;
+        // =====================================================================
+        // 10. NHẬP DỮ LIỆU CŨ TỪ INDEXEDDB VÀO BACKEND SQLITE
+        // =====================================================================
+        function checkIndexedDBCount() {
+            try {
+                const req = indexedDB.open('RainfallWaterDB', 2);
+                req.onsuccess = (e) => {
+                    const db = e.target.result;
+                    if (db.objectStoreNames.contains('measurements')) {
+                        const tx = db.transaction('measurements', 'readonly');
+                        const store = tx.objectStore('measurements');
+                        const countReq = store.count();
+                        countReq.onsuccess = () => {
+                            const cnt = countReq.result || 0;
+                            const el = document.getElementById('indexeddb-count-label');
+                            if (el) el.innerText = `Tìm thấy ${cnt.toLocaleString()} mẫu trong IndexedDB`;
+                        };
+                    }
+                };
+            } catch (err) {
+                console.log('IndexedDB check:', err);
             }
-            const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
-            const store = tx.objectStore(STORE_NAME);
-            store.clear();
-            tx.oncomplete = () => {
-                updateDbCountDisplay();
-                applyFilter();
-                addLog('[CSDL] Đã làm sạch toàn bộ dữ liệu lưu trữ.');
+        }
+
+        function importOldIndexedDBToBackend() {
+            try {
+                const req = indexedDB.open('RainfallWaterDB', 2);
+                req.onsuccess = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('measurements')) {
+                        alert('Không tìm thấy dữ liệu cũ trong IndexedDB.');
+                        return;
+                    }
+                    const tx = db.transaction('measurements', 'readonly');
+                    const store = tx.objectStore('measurements');
+                    const allReq = store.getAll();
+                    allReq.onsuccess = async () => {
+                        const records = allReq.result || [];
+                        if (records.length === 0) {
+                            alert('Không có bản ghi nào trong IndexedDB để nhập.');
+                            return;
+                        }
+                        try {
+                            const res = await fetch(`${API_BASE_URL}/api/import/indexeddb`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ records: records })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                alert(`Đã nhập thành công ${data.imported} bản ghi cũ từ IndexedDB vào Backend SQLite!`);
+                                addLog(`[IMPORT] Nhập thành công ${data.imported} mẫu vào Backend`);
+                                applyFilter();
+                            } else {
+                                alert('Lỗi khi nhập: ' + data.message);
+                            }
+                        } catch (err) {
+                            alert('Không thể kết nối tới Backend API để nhập dữ liệu!');
+                        }
+                    };
+                };
+            } catch (err) {
+                alert('Lỗi truy xuất IndexedDB: ' + err.message);
+            }
+        }
+
+        // =====================================================================
+        // 11. XÓA CSDL (BẮT GÕ "XOA" & TỰ ĐỘNG TẢI FILE BACKUP SQLITE)
+        // =====================================================================
+        function openClearDatabaseModal() {
+            document.getElementById('delete-confirm-input').value = '';
+            checkDeleteConfirmation('');
+            document.getElementById('clear-db-modal').classList.remove('hidden');
+        }
+
+        function closeClearDatabaseModal() {
+            document.getElementById('clear-db-modal').classList.add('hidden');
+        }
+
+        function checkDeleteConfirmation(val) {
+            const btn = document.getElementById('btn-confirm-delete');
+            if (val.trim().toUpperCase() === 'XOA') {
+                btn.disabled = false;
+                btn.classList.remove('opacity-40', 'cursor-not-allowed');
+                btn.classList.add('hover:bg-rose-700');
+            } else {
+                btn.disabled = true;
+                btn.classList.add('opacity-40', 'cursor-not-allowed');
+                btn.classList.remove('hover:bg-rose-700');
+            }
+        }
+
+        async function executeClearDatabase() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/database/clear`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ confirm: 'XOA' })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    closeClearDatabaseModal();
+                    // Tự động tải về file backup SQLite
+                    if (data.backup_download_url) {
+                        window.location.href = `${API_BASE_URL}${data.backup_download_url}`;
+                    }
+                    alert(`Đã tạo bản sao lưu (${data.backup_filename}) và xóa sạch CSDL Backend thành công!`);
+                    addLog(`[CSDL] Đã xóa CSDL SQLite sau khi tạo bản sao lưu ${data.backup_filename}`);
+                    applyFilter();
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (e) {
+                alert('Không thể kết nối tới Backend API để xóa CSDL!');
+            }
+        }
+
+        // =====================================================================
+        // 12. CÀI ĐẶT MODAL
+        // =====================================================================
+        function openSettingsModal() {
+            document.getElementById('setting-warn').value = appSettings.thresholdWarn;
+            document.getElementById('setting-danger').value = appSettings.thresholdDanger;
+            document.getElementById('setting-hysteresis').value = appSettings.hysteresis;
+            document.getElementById('setting-volt-min').value = appSettings.voltMin;
+            document.getElementById('setting-volt-max').value = appSettings.voltMax;
+            document.getElementById('setting-timeout-min').value = appSettings.timeoutMinutes;
+            checkIndexedDBCount();
+            document.getElementById('settings-modal').classList.remove('hidden');
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settings-modal').classList.add('hidden');
+        }
+
+        function saveSettingsFromModal() {
+            const newSettings = {
+                thresholdWarn: parseFloat(document.getElementById('setting-warn').value) || 80.0,
+                thresholdDanger: parseFloat(document.getElementById('setting-danger').value) || 200.0,
+                hysteresis: parseFloat(document.getElementById('setting-hysteresis').value) || 5.0,
+                voltMin: parseFloat(document.getElementById('setting-volt-min').value) || 0.08,
+                voltMax: parseFloat(document.getElementById('setting-volt-max').value) || 3.35,
+                timeoutMinutes: parseInt(document.getElementById('setting-timeout-min').value) || 10
             };
+            saveSettings(newSettings);
+            closeSettingsModal();
+            addLog(`[CÀI ĐẶT] Đã lưu cấu hình mới`);
+        }
+
+        function resetSettingsToDefault() {
+            if (confirm('Khôi phục toàn bộ ngưỡng cài đặt về giá trị mặc định?')) {
+                saveSettings(DEFAULT_SETTINGS);
+                openSettingsModal();
+            }
         }
 
         function changeTopic() {
@@ -1009,7 +1295,7 @@
                 client.unsubscribe(currentTopic);
                 currentTopic = newTopic;
                 client.subscribe(currentTopic);
-                addLog(`[SYSTEM] Đã chuyển sang lắng nghe topic mới: ${currentTopic}`);
+                addLog(`[SYSTEM] Đã chuyển sang topic live: ${currentTopic}`);
             }
         }
 
@@ -1025,9 +1311,135 @@
             document.getElementById('log-console').innerHTML = '';
         }
 
-        // Khởi động CSDL khi tải trang
+        // =====================================================================
+        // 13. KHỞI TẠO BIỂU ĐỒ CHART.JS
+        // =====================================================================
+        const ctxLive = document.getElementById('sensorChart').getContext('2d');
+        const sensorChart = new Chart(ctxLive, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Mực nước (cm)',
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                        fill: true,
+                        data: [],
+                        borderWidth: 2.5,
+                        tension: 0.35,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Điện áp (V)',
+                        borderColor: '#a855f7',
+                        borderDash: [4, 4],
+                        fill: false,
+                        data: [],
+                        borderWidth: 1.5,
+                        tension: 0.2,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 200 },
+                scales: {
+                    x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+                    y: {
+                        type: 'linear', position: 'left',
+                        title: { display: true, text: 'Mực nước (cm)', color: '#06b6d4' },
+                        grid: { color: '#334155' },
+                        ticks: { color: '#06b6d4' },
+                        min: 0, max: 500
+                    },
+                    y1: {
+                        type: 'linear', position: 'right',
+                        title: { display: true, text: 'Điện áp (V)', color: '#a855f7' },
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#a855f7' },
+                        min: 0, max: 3.5
+                    }
+                }
+            }
+        });
+
+        const ctxHist = document.getElementById('historyChart').getContext('2d');
+        historyChartInstance = new Chart(ctxHist, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Mực nước (cm)',
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                        fill: true,
+                        data: [],
+                        borderWidth: 2,
+                        pointRadius: 2,
+                        tension: 0.2,
+                        spanGaps: false // QUAN TRỌNG: spanGaps=false để tự động ngắt nét vẽ khi gặp gap (null)!
+                    },
+                    {
+                        label: 'Ngưỡng cảnh báo',
+                        borderColor: '#fbbf24',
+                        borderDash: [6, 4],
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        fill: false,
+                        data: []
+                    },
+                    {
+                        label: 'Ngưỡng nguy hiểm',
+                        borderColor: '#f43f5e',
+                        borderDash: [4, 2],
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        fill: false,
+                        data: []
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                if (context.raw === null) return 'Mất tín hiệu (Gap)';
+                                return context.dataset.label + ': ' + context.raw + ' cm';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', maxTicksLimit: 12, font: { size: 10 } } },
+                    y: {
+                        min: 0, max: 500,
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' },
+                        title: { display: true, text: 'Chiều cao cột nước (cm)', color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+
         window.addEventListener('DOMContentLoaded', () => {
-            initDatabase();
+            flatpickr("#filter-date", {
+                dateFormat: "d/m/Y",
+                locale: "vn",
+                allowInput: true,
+                onChange: () => applyFilter()
+            });
+
+            updateThresholdLabels();
+            checkBackendStatus();
+            applyFilter();
         });
     </script>
 </body>

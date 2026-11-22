@@ -44,7 +44,8 @@ try:
             "volt": round(volt, 2),
             "percent": round(percent, 1),
             "press": round(press, 3),
-            "raw": raw_adc
+            "raw": raw_adc,
+            "is_simulated": True
         }
 
         payload_json = json.dumps(payload)
