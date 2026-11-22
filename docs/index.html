@@ -865,7 +865,7 @@
                 sensorChart.data.labels.push(shortTime);
                 sensorChart.data.datasets[0].data.push(isVoltageError ? null : waterLevel);
                 sensorChart.data.datasets[1].data.push(voltVal);
-                sensorChart.update();
+                sensorChart.update('none');
 
                 // LƯU Ý QUAN TRỌNG: Browser KHÔNG ghi vào IndexedDB nữa!
                 // Toàn bộ dữ liệu được Backend Service service.py tự động thu thập và ghi vào SQLite 24/7.
@@ -1086,7 +1086,7 @@
                 historyChartInstance.data.datasets[0].data = [];
                 historyChartInstance.data.datasets[1].data = [];
                 historyChartInstance.data.datasets[2].data = [];
-                historyChartInstance.update();
+                historyChartInstance.update('none');
                 badge.classList.add('hidden');
                 return;
             }
@@ -1105,7 +1105,7 @@
             historyChartInstance.data.datasets[1].data = new Array(seriesData.labels.length).fill(appSettings.thresholdWarn);
             historyChartInstance.data.datasets[2].data = new Array(seriesData.labels.length).fill(appSettings.thresholdDanger);
 
-            historyChartInstance.update();
+            historyChartInstance.update('none');
         }
 
         // =====================================================================
@@ -1460,7 +1460,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: { duration: 200 },
+                animation: false,
                 scales: {
                     x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
                     y: {
@@ -1521,6 +1521,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: false,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     tooltip: {
