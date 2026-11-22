@@ -10,6 +10,13 @@
 
 static const char *TAG = "UART_APP";
 
+static uint32_t s_uart_rx_count = 0;
+
+uint32_t uart_app_get_rx_count(void)
+{
+    return s_uart_rx_count;
+}
+
 /*
  * TẠI SAO LẠI CẦN TASK GOM DÒNG NÀY?
  * Dữ liệu UART được truyền dạng dòng byte liên tục (stream). Nếu đọc nguyên một
@@ -43,7 +50,8 @@ static void uart_rx_task(void *pvParameters)
 
                 // Kiểm tra chuỗi không rỗng
                 if (strlen(line_buf) > 0) {
-                    ESP_LOGI(TAG, "[UART RX] Nhan tu STM32: %s", line_buf);
+                    s_uart_rx_count++;
+                    ESP_LOGI(TAG, "[UART RX #%lu] Nhan tu STM32: %s", (unsigned long)s_uart_rx_count, line_buf);
 
                     // Đẩy dữ liệu lên Cloud qua MQTT
                     esp_err_t err = mqtt_app_publish(NULL, line_buf);

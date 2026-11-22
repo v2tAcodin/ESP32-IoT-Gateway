@@ -58,6 +58,7 @@ g_db_lock = threading.Lock()
 g_cache_lock = threading.Lock()
 g_last_msg_cache = {"topic": None, "payload": None, "time": 0.0}
 g_is_running = True
+g_mqtt_packet_counter = 0
 
 # ======================================================================================
 # 1. QUẢN LÝ CƠ SỞ DỮ LIỆU SQLITE (WAL MODE & AUTO-MIGRATION V3.0)
@@ -211,9 +212,12 @@ def process_mqtt_message(topic, payload_str):
             conn.commit()
             conn.close()
 
+        global g_mqtt_packet_counter
+        g_mqtt_packet_counter += 1
+
         dt_vn = datetime.fromtimestamp(now_epoch_ms / 1000.0, tz=VN_TZ)
         tag = "[TEST]" if is_simulated else "[THẬT]"
-        logging.info(f"[{dt_vn.strftime('%d/%m/%Y %H:%M:%S')}] {tag} Mực nước: {level:5.1f}cm | Volt: {volt:4.2f}V | ADC: {raw:4d}")
+        logging.info(f"[{dt_vn.strftime('%d/%m/%Y %H:%M:%S')}] [GÓI #{g_mqtt_packet_counter}] {tag} Mực nước: {level:5.1f}cm | Volt: {volt:4.2f}V | ADC: {raw:4d}")
 
     except Exception as e:
         logging.warning(f"[DROP BẢN TIN LỖI] {e} | Payload thô: '{payload_str}'")
@@ -291,6 +295,8 @@ def get_status():
 
     with g_db_lock:
         conn = get_db_connection()
+        total_db_count = conn.execute("SELECT COUNT(*) FROM measurements").fetchone()[0]
+        real_db_count = conn.execute("SELECT COUNT(*) FROM measurements WHERE is_simulated = 0").fetchone()[0]
         # Lấy mẫu thật mới nhất
         row = conn.execute('SELECT * FROM measurements WHERE is_simulated = 0 ORDER BY received_at DESC LIMIT 1').fetchone()
         if not row:
@@ -333,7 +339,10 @@ def get_status():
         "last_received_at": last_received_at,
         "last_received_str": last_received_str,
         "server_time_utc": now_ms,
-        "latest_measurement": latest_data
+        "latest_measurement": latest_data,
+        "received_packets_session": g_mqtt_packet_counter,
+        "total_packets_db": total_db_count,
+        "real_packets_db": real_db_count
     })
 
 

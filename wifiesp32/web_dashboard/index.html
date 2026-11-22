@@ -47,6 +47,10 @@
                 <span id="backend-status-badge" class="px-3 py-1.5 text-xs font-semibold rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                     Backend API: Đang kết nối...
                 </span>
+                <span id="header-packet-badge" class="px-3 py-1.5 text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono flex items-center gap-1.5" title="Số lượng gói tin nhận được từ ESP32">
+                    <span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                    <span>Đã nhận: <strong id="val-header-packet-count" class="text-white">0</strong> gói tin</span>
+                </span>
                 <span class="text-xs text-slate-400 font-mono" id="last-update">Cập nhật: Chưa có</span>
             </div>
         </header>
@@ -134,8 +138,13 @@
                     <span class="text-slate-400">Sức khỏe ADC:</span>
                     <span id="val-sensor-status-label" class="text-emerald-400 font-semibold text-xs">Tốt</span>
                 </div>
-                <div class="mt-1 text-[11px] text-slate-500">
-                    Gói tin nhận: <strong class="text-slate-300 font-mono" id="val-count">0</strong>
+                <div class="mt-2 pt-2 border-t border-slate-700/60 flex items-center justify-between text-[11px]">
+                    <span class="text-slate-400">Gói tin nhận (Live):</span>
+                    <span class="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono font-bold" id="val-count">0</span>
+                </div>
+                <div class="mt-1 flex items-center justify-between text-[11px]">
+                    <span class="text-slate-400">Tổng CSDL (SQLite):</span>
+                    <span class="text-cyan-300 font-mono font-semibold" id="val-total-db-packets">0 mẫu</span>
                 </div>
                 <div class="absolute right-3 top-3 opacity-10 text-purple-400">
                     <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24"><path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.5c.49 0 .78.36.49.77L11 21z"/></svg>
@@ -759,6 +768,14 @@
                     document.getElementById('last-update').innerText = 'Cập nhật: ' + data.last_received_str;
                 }
 
+                // Cập nhật tổng số lượng mẫu từ CSDL SQLite
+                if (data.total_packets_db !== undefined) {
+                    const totalDbEl = document.getElementById('val-total-db-packets');
+                    if (totalDbEl) totalDbEl.innerText = data.total_packets_db.toLocaleString() + ' mẫu';
+                    const dbCountBadge = document.getElementById('db-count-badge');
+                    if (dbCountBadge) dbCountBadge.innerText = `${data.total_packets_db.toLocaleString()} mẫu`;
+                }
+
                 // Cập nhật thẻ Live từ mẫu mới nhất của backend nếu có
                 if (data.latest_measurement && isSystemLostData) {
                     document.getElementById('val-level').innerText = data.latest_measurement.level_cm.toFixed(1);
@@ -805,6 +822,8 @@
             const timeStr = formatFullDateTimeVN(nowEpoch);
             packetCount++;
             document.getElementById('val-count').innerText = packetCount.toLocaleString();
+            const headerPacketEl = document.getElementById('val-header-packet-count');
+            if (headerPacketEl) headerPacketEl.innerText = packetCount.toLocaleString();
 
             try {
                 const data = JSON.parse(rawStr);

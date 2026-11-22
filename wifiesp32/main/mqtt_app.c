@@ -9,6 +9,12 @@ static const char *TAG = "MQTT_APP";
 
 static esp_mqtt_client_handle_t s_mqtt_client = NULL;
 static bool s_is_connected = false;
+static uint32_t s_mqtt_pub_count = 0;
+
+uint32_t mqtt_app_get_pub_count(void)
+{
+    return s_mqtt_pub_count;
+}
 
 /*
  * TẠI SAO LẠI CẦN MQTT EVENT HANDLER?
@@ -89,7 +95,8 @@ esp_err_t mqtt_app_publish(const char *topic, const char *data)
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "[MQTT PUB] -> Topic: %s | Payload: %s", target_topic, data);
+    s_mqtt_pub_count++;
+    ESP_LOGI(TAG, "[MQTT PUB #%lu] -> Topic: %s | Payload: %s", (unsigned long)s_mqtt_pub_count, target_topic, data);
     return ESP_OK;
 }
 

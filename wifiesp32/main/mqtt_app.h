@@ -25,6 +25,11 @@ esp_err_t mqtt_app_publish(const char *topic, const char *data);
  */
 bool mqtt_app_is_connected(void);
 
+/**
+ * @brief Lấy tổng số gói tin đã xuất bản lên MQTT Broker thành công
+ */
+uint32_t mqtt_app_get_pub_count(void);
+
 #ifdef __cplusplus
 }
 #endif
