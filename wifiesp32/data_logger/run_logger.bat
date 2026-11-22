@@ -18,12 +18,13 @@ if errorlevel 1 (
 )
 
 echo.
-echo Đang khởi chạy logger_to_excel.py...
-echo Dữ liệu sẽ được tự động lưu vào file Excel: Bao_Cao_Luong_Mua_Nghien_Cuu.xlsx
+echo Đang khởi chạy service.py (Backend Service v3.0)...
+echo Dữ liệu sẽ được tự động lưu bền vững vào SQLite: rainfall_data.db
+echo Cung cấp REST API tại http://localhost:5000 cho Web Dashboard
 echo Nhấn Ctrl + C khi muốn dừng chương trình.
 echo ==============================================================================
 echo.
 
-python "%~dp0logger_to_excel.py"
+python "%~dp0service.py"
 
 pause
