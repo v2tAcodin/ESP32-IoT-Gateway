@@ -33,52 +33,61 @@ static void uart_rx_task(void *pvParameters) {
            "Baud=%d)",
            STM32_UART_RX_PIN, STM32_UART_TX_PIN, STM32_UART_BAUD);
 
-    while (1) {
-        // Đọc từng byte từ bộ đệm UART, chờ tối đa 10ms để nhường CPU nếu không có dữ liệu
-        int len = uart_read_bytes(STM32_UART_PORT, &byte_in, 1, pdMS_TO_TICKS(10));
-        if (len > 0) {
-            // Trường hợp 1: Gặp ký tự xuống dòng '\n' hoặc '\r'
-            if (byte_in == '\n' || byte_in == '\r') {
-                if (line_idx > 0) {
-                    line_buf[line_idx] = '\0';
-                    s_uart_rx_count++;
-                    ESP_LOGI(TAG, "[UART RX #%lu] Nhan tu STM32: %s", (unsigned long)s_uart_rx_count, line_buf);
+  while (1) {
+    // Đọc từng byte từ bộ đệm UART, chờ tối đa 10ms để nhường CPU nếu không có
+    // dữ liệu
+    int len = uart_read_bytes(STM32_UART_PORT, &byte_in, 1, pdMS_TO_TICKS(10));
+    if (len > 0) {
+      // Trường hợp 1: Gặp ký tự xuống dòng '\n' hoặc '\r'
+      if (byte_in == '\n' || byte_in == '\r') {
+        if (line_idx > 0) {
+          line_buf[line_idx] = '\0';
+          s_uart_rx_count++;
+          ESP_LOGI(TAG, "[UART RX #%lu] Nhan tu STM32: %s",
+                   (unsigned long)s_uart_rx_count, line_buf);
 
-                    // Đẩy dữ liệu lên Cloud qua MQTT
-                    esp_err_t err = mqtt_app_publish(NULL, line_buf);
-                    if (err != ESP_OK) {
-                        ESP_LOGW(TAG, "Chua the day goi tin len Cloud: %s", esp_err_to_name(err));
-                    }
-                    line_idx = 0;
-                }
-            }
-            // Trường hợp 2: Gặp dấu đóng ngoặc nhọn '}' của JSON (khi STM32 không gửi '\n')
-            else if (line_idx > 10 && line_buf[0] == '{' && byte_in == '}') {
-                line_buf[line_idx++] = '}';
-                line_buf[line_idx] = '\0';
-                s_uart_rx_count++;
-                ESP_LOGI(TAG, "[UART RX #%lu] Nhan tu STM32 (ket thuc JSON): %s", (unsigned long)s_uart_rx_count, line_buf);
+          // Đẩy dữ liệu lên Cloud qua MQTT
+          esp_err_t err = mqtt_app_publish(NULL, line_buf);
+          if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Chua the day goi tin len Cloud: %s",
+                     esp_err_to_name(err));
+          }
+          line_idx = 0;
+        }
+      }
+      // Trường hợp 2: Gặp dấu đóng ngoặc nhọn '}' của JSON (khi STM32 không gửi
+      // '\n')
+      else if (line_idx > 10 && line_buf[0] == '{' && byte_in == '}') {
+        line_buf[line_idx++] = '}';
+        line_buf[line_idx] = '\0';
+        s_uart_rx_count++;
+        ESP_LOGI(TAG, "[UART RX #%lu] Nhan tu STM32 (ket thuc JSON): %s",
+                 (unsigned long)s_uart_rx_count, line_buf);
 
-                esp_err_t err = mqtt_app_publish(NULL, line_buf);
-                if (err != ESP_OK) {
-                    ESP_LOGW(TAG, "Chua the day goi tin len Cloud: %s", esp_err_to_name(err));
-                }
-                line_idx = 0;
-            }
-            else {
-                // Nếu chưa bắt đầu gói tin mà gặp ký tự rác (không phải '{'), bỏ qua để lọc nhiễu
-                if (line_idx == 0 && byte_in != '{') {
-                    // Bỏ qua byte rác / nhiễu đầu dòng
-                } else if (line_idx < (UART_BUF_SIZE - 1)) {
-                    line_buf[line_idx++] = (char)byte_in;
-                } else {
-                    line_buf[40] = '\0';
-                    ESP_LOGW(TAG, "Bo dem day truoc khi gap '\\n'! 40 byte dau: '%.40s' (Byte 0: 0x%02X)", line_buf, (uint8_t)line_buf[0]);
-                    line_idx = 0;
-                }
-            }
+        esp_err_t err = mqtt_app_publish(NULL, line_buf);
+        if (err != ESP_OK) {
+          ESP_LOGW(TAG, "Chua the day goi tin len Cloud: %s",
+                   esp_err_to_name(err));
+        }
+        line_idx = 0;
+      } else {
+        // Nếu chưa bắt đầu gói tin mà gặp ký tự rác (không phải '{'), bỏ qua để
+        // lọc nhiễu
+        if (line_idx == 0 && byte_in != '{') {
+          // Bỏ qua byte rác / nhiễu đầu dòng
+        } else if (line_idx < (UART_BUF_SIZE - 1)) {
+          line_buf[line_idx++] = (char)byte_in;
+        } else {
+          line_buf[40] = '\0';
+          ESP_LOGW(TAG,
+                   "Bo dem day truoc khi gap '\\n'! 40 byte dau: '%.40s' (Byte "
+                   "0: 0x%02X)",
+                   line_buf, (uint8_t)line_buf[0]);
+          line_idx = 0;
         }
     }
+}
+}
 }
 
 esp_err_t uart_app_init(void) {

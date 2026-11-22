@@ -31,10 +31,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         s_is_connected = true;
         ESP_LOGI(TAG, "===> DA KET NOI TOI MQTT BROKER THANH CONG!");
         ESP_LOGI(TAG, "San sang truyen nhan du lieu tren topic: %s", MQTT_TOPIC_DATA);
-        // Bắn bản tin Online lên Cloud (retain=1 để các client mở sau nhận được ngay)
+        // Bắn bản tin Online lên Cloud (retain=0 để tránh broker lưu giữ tin cũ khi rút nguồn)
         esp_mqtt_client_publish(s_mqtt_client, MQTT_TOPIC_DATA "/status",
                                 "{\"gateway\":\"ESP32-C3\",\"status\":\"online\"}",
-                                0, 1, 1);
+                                0, 1, 0);
         break;
 
     case MQTT_EVENT_DISCONNECTED:
@@ -66,12 +66,15 @@ esp_err_t mqtt_app_init(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = MQTT_BROKER_URI,
-        .session.last_will = {
-            .topic = MQTT_TOPIC_DATA "/status",
-            .msg = "{\"gateway\":\"ESP32-C3\",\"status\":\"offline\"}",
-            .msg_len = 0,
-            .qos = 1,
-            .retain = 1,
+        .session = {
+            .last_will = {
+                .topic = MQTT_TOPIC_DATA "/status",
+                .msg = "{\"gateway\":\"ESP32-C3\",\"status\":\"offline\"}",
+                .msg_len = 0,
+                .qos = 1,
+                .retain = 0,
+            },
+            .keepalive = 15,
         },
     };
 
@@ -96,7 +99,7 @@ esp_err_t mqtt_app_publish_status(const char *json_status)
     if (s_mqtt_client == NULL || !s_is_connected) {
         return ESP_ERR_INVALID_STATE;
     }
-    int msg_id = esp_mqtt_client_publish(s_mqtt_client, MQTT_TOPIC_DATA "/status", json_status, 0, 1, 1);
+    int msg_id = esp_mqtt_client_publish(s_mqtt_client, MQTT_TOPIC_DATA "/status", json_status, 0, 1, 0);
     return (msg_id >= 0) ? ESP_OK : ESP_FAIL;
 }
 

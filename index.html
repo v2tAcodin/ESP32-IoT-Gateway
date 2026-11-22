@@ -650,6 +650,64 @@
         let packetCount = 0;
         let currentTopic = document.getElementById('topic-input').value;
 
+        // Theo dõi Heartbeat từ ESP32 Gateway (Watchdog Timer)
+        let lastEsp32HeartbeatTs = 0;
+        let isEsp32Online = false;
+
+        function setGatewayOnline(online) {
+            isEsp32Online = online;
+            const gwBadge = document.getElementById('gateway-status-badge');
+            const gwDot = document.getElementById('gateway-status-dot');
+            const gwText = document.getElementById('gateway-status-text');
+            const alertBadge = document.getElementById('water-alert-badge');
+            const sensLabel = document.getElementById('val-sensor-status-label');
+
+            if (online) {
+                if (gwBadge) gwBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono flex items-center gap-1.5';
+                if (gwDot) gwDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+                if (gwText) gwText.innerText = 'ESP32: Online';
+
+                if (packetCount === 0) {
+                    if (alertBadge) {
+                        alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse';
+                        alertBadge.innerText = '⏳ CHỜ CẢM BIẾN STM32 (ESP32 ĐÃ KẾT NỐI)';
+                    }
+                    if (sensLabel) {
+                        sensLabel.innerText = 'Chờ STM32';
+                        sensLabel.className = 'text-amber-300 text-xs font-semibold';
+                    }
+                }
+            } else {
+                if (gwBadge) gwBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono flex items-center gap-1.5';
+                if (gwDot) gwDot.className = 'w-2 h-2 rounded-full bg-rose-500';
+                if (gwText) gwText.innerText = 'ESP32: Offline';
+
+                if (packetCount === 0) {
+                    if (alertBadge) {
+                        alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-600/30 text-rose-300 border border-rose-500 animate-pulse';
+                        alertBadge.innerText = '⚠️ ESP32 MẤT KẾT NỐI (RÚT NGUỒN HOẶC MẤT WI-FI)';
+                    }
+                    if (sensLabel) {
+                        sensLabel.innerText = 'ESP32 Offline';
+                        sensLabel.className = 'text-rose-400 text-xs font-bold';
+                    }
+                }
+            }
+        }
+
+        // Watchdog định kỳ mỗi 2 giây: Nếu quá 12 giây không nhận heartbeat từ ESP32 thì tự động chuyển sang Offline
+        setInterval(() => {
+            if (lastEsp32HeartbeatTs > 0) {
+                const diffSec = (Date.now() - lastEsp32HeartbeatTs) / 1000.0;
+                if (diffSec > 12) {
+                    if (isEsp32Online) {
+                        addLog('[CẢNH BÁO] Quá 12s không có tín hiệu từ ESP32 (Thiết bị đã ngắt nguồn hoặc mất kết nối Wi-Fi)');
+                    }
+                    setGatewayOnline(false);
+                }
+            }
+        }, 2000);
+
         // Phân trang & sắp xếp
         let currentPage = 1;
         let pageSize = 25;
@@ -759,17 +817,19 @@
                     backendBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse';
 
                     const alertBadge = document.getElementById('water-alert-badge');
-                    const gwText = document.getElementById('gateway-status-text');
-                    const isGwOnline = gwText && gwText.innerText.includes('Online');
-
-                    if (isGwOnline && packetCount === 0) {
+                    if (isEsp32Online && packetCount === 0) {
                         alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse';
                         alertBadge.innerText = '⏳ CHỜ CẢM BIẾN STM32 (ESP32 ĐÃ KẾT NỐI)';
                         document.getElementById('val-sensor-status-label').innerText = 'Chờ STM32';
                         document.getElementById('val-sensor-status-label').className = 'text-amber-300 text-xs font-semibold';
+                    } else if (!isEsp32Online && packetCount === 0) {
+                        alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-600/30 text-rose-300 border border-rose-500 animate-pulse';
+                        alertBadge.innerText = '⚠️ ESP32 MẤT KẾT NỐI (RÚT NGUỒN HOẶC MẤT WI-FI)';
+                        document.getElementById('val-sensor-status-label').innerText = 'ESP32 Offline';
+                        document.getElementById('val-sensor-status-label').className = 'text-rose-400 text-xs font-bold';
                     } else {
                         alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-rose-600/30 text-rose-300 border border-rose-500 animate-pulse';
-                        alertBadge.innerText = `⚠️ MẤT DỮ LIỆU (Lần cuối nhận: ${data.last_received_str})`;
+                        alertBadge.innerText = `⚠️ MẤT DỮ LIỆU (Lần cuối nhận: ${data.last_received_str || 'Chưa có'})`;
                         document.getElementById('val-sensor-status-label').innerText = 'Mất dữ liệu!';
                         document.getElementById('val-sensor-status-label').className = 'text-rose-400 text-xs font-bold';
                     }
@@ -838,33 +898,20 @@
             if (topic === currentTopic + '/status') {
                 try {
                     const st = JSON.parse(rawStr);
-                    const gwBadge = document.getElementById('gateway-status-badge');
-                    const gwDot = document.getElementById('gateway-status-dot');
-                    const gwText = document.getElementById('gateway-status-text');
-
                     if (st.status === 'online') {
-                        if (gwBadge) gwBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono flex items-center gap-1.5';
-                        if (gwDot) gwDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
-                        if (gwText) gwText.innerText = 'ESP32: Online';
-
-                        // Nếu chưa có mẫu nào từ cảm biến STM32, hiện thông báo rõ ràng cho người dùng
-                        if (packetCount === 0) {
-                            const alertBadge = document.getElementById('water-alert-badge');
-                            alertBadge.className = 'px-3 py-1.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse';
-                            alertBadge.innerText = '⏳ CHỜ CẢM BIẾN STM32 (ESP32 ĐÃ KẾT NỐI)';
-                            document.getElementById('val-sensor-status-label').innerText = 'Chờ STM32';
-                            document.getElementById('val-sensor-status-label').className = 'text-amber-300 text-xs font-semibold';
-                        }
+                        lastEsp32HeartbeatTs = Date.now();
+                        setGatewayOnline(true);
                     } else if (st.status === 'offline') {
-                        if (gwBadge) gwBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono flex items-center gap-1.5';
-                        if (gwDot) gwDot.className = 'w-2 h-2 rounded-full bg-rose-500';
-                        if (gwText) gwText.innerText = 'ESP32: Offline';
+                        lastEsp32HeartbeatTs = 0;
+                        setGatewayOnline(false);
                     }
                 } catch (e) {}
                 return;
             }
 
             // 2. Nếu là gói tin dữ liệu cảm biến đo đạc
+            lastEsp32HeartbeatTs = Date.now();
+            if (!isEsp32Online) setGatewayOnline(true);
             const nowEpoch = Date.now();
             const timeStr = formatFullDateTimeVN(nowEpoch);
             packetCount++;
@@ -1457,6 +1504,14 @@
                 client.unsubscribe(currentTopic);
                 client.unsubscribe(currentTopic + '/status');
                 currentTopic = newTopic;
+                lastEsp32HeartbeatTs = 0;
+                setGatewayOnline(false);
+                const gwText = document.getElementById('gateway-status-text');
+                if (gwText) gwText.innerText = 'ESP32: Đang dò...';
+                const gwDot = document.getElementById('gateway-status-dot');
+                if (gwDot) gwDot.className = 'w-2 h-2 rounded-full bg-slate-500';
+                const gwBadge = document.getElementById('gateway-status-badge');
+                if (gwBadge) gwBadge.className = 'px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono flex items-center gap-1.5';
                 client.subscribe(currentTopic);
                 client.subscribe(currentTopic + '/status');
                 addLog(`[SYSTEM] Đã chuyển sang topic live: ${currentTopic}`);
