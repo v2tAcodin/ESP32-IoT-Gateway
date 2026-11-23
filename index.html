@@ -462,11 +462,11 @@
                     </div>
                     <div>
                         <label class="block text-slate-400 mb-1">Địa chỉ API Server (URL):</label>
-                        <input type="text" id="setting-backend-url" placeholder="Để trống nếu mở qua Flask, hoặc nhập http://IP:5000" 
+                        <input type="text" id="setting-backend-url" placeholder="https://esp32-iot-gateway.onrender.com" 
                                class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500">
                     </div>
                     <p class="text-[11px] text-slate-400">
-                        * Mặc định tự nhận diện khi mở qua <code class="text-cyan-300">http://&lt;IP&gt;:5000</code>. Khi mở qua GitHub Pages trên máy tính khác, hãy nhập IP máy chủ (VD: <code class="text-cyan-300">http://192.168.1.3:5000</code>).
+                        * Mặc định kết nối máy chủ Cloud: <code class="text-cyan-300">https://esp32-iot-gateway.onrender.com</code> (hoạt động 24/7 toàn cầu).
                     </p>
                 </div>
 
@@ -623,8 +623,8 @@
 
         // Tự động nhận diện API_BASE_URL:
         // 1. Nếu cấu hình thủ công trong Cài Đặt -> Dùng cấu hình đó
-        // 2. Nếu đang mở qua Flask server (cổng 5000) -> Tự động dùng window.location.origin
-        // 3. Mặc định dự phòng -> http://localhost:5000
+        // 2. Nếu đang mở qua Flask server cục bộ (cổng 5000) -> Dùng window.location.origin
+        // 3. Mặc định toàn cầu (cho GitHub Pages & bất kỳ thiết bị nào) -> Kết nối Cloud Render 24/7!
         function getApiBaseUrl() {
             if (appSettings.backendUrl && appSettings.backendUrl.trim() !== '') {
                 return appSettings.backendUrl.trim().replace(/\/+$/, '');
@@ -632,7 +632,7 @@
             if (window.location.port === '5000') {
                 return window.location.origin;
             }
-            return 'http://localhost:5000';
+            return 'https://esp32-iot-gateway.onrender.com';
         }
         let API_BASE_URL = getApiBaseUrl();
 
