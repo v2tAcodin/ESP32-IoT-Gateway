@@ -629,7 +629,8 @@
         let currentAlertState = 'SAFE';
         let isSystemLostData = false;
         let lastRealRecord = null;
-        let packetCount = 0;
+        let savedCount = localStorage.getItem('packetCount');
+        let packetCount = savedCount ? parseInt(savedCount, 10) : 0;
         let currentTopic = document.getElementById('topic-input').value;
 
         // Theo dõi Heartbeat từ ESP32 Gateway (Watchdog Timer)
@@ -677,13 +678,13 @@
             }
         }
 
-        // Watchdog định kỳ mỗi 2 giây: Nếu quá 12 giây không nhận heartbeat từ ESP32 thì tự động chuyển sang Offline
+        // Watchdog định kỳ mỗi 2 giây: Nếu quá 40 giây không nhận heartbeat từ ESP32 thì tự động chuyển sang Offline
         setInterval(() => {
             if (lastEsp32HeartbeatTs > 0) {
                 const diffSec = (Date.now() - lastEsp32HeartbeatTs) / 1000.0;
-                if (diffSec > 12) {
+                if (diffSec > 40) {
                     if (isEsp32Online) {
-                        addLog('[CẢNH BÁO] Quá 12s không có tín hiệu từ ESP32 (Thiết bị đã ngắt nguồn hoặc mất kết nối Wi-Fi)');
+                        addLog('[CẢNH BÁO] Quá 40s không có tín hiệu từ ESP32 (Thiết bị đã ngắt nguồn hoặc mất kết nối Wi-Fi)');
                     }
                     setGatewayOnline(false);
                 }
@@ -830,16 +831,31 @@
                     if (totalDbEl) totalDbEl.innerText = data.total_packets_db.toLocaleString() + ' mẫu';
                     const dbCountBadge = document.getElementById('db-count-badge');
                     if (dbCountBadge) dbCountBadge.innerText = `${data.total_packets_db.toLocaleString()} mẫu`;
+
+                    // Đồng bộ số lượng gói tin đã nhận với CSDL nếu packetCount đang nhỏ hơn
+                    if (packetCount < data.total_packets_db) {
+                        packetCount = data.total_packets_db;
+                        localStorage.setItem('packetCount', packetCount);
+                    }
+                    document.getElementById('val-count').innerText = packetCount.toLocaleString();
+                    const headerPacketEl = document.getElementById('val-header-packet-count');
+                    if (headerPacketEl) headerPacketEl.innerText = packetCount.toLocaleString();
                 }
 
-                // Cập nhật thẻ Live từ mẫu mới nhất của backend nếu có
-                if (data.latest_measurement && isSystemLostData) {
-                    document.getElementById('val-level').innerText = data.latest_measurement.level_cm.toFixed(1);
-                    document.getElementById('val-level-m').innerText = (data.latest_measurement.level_cm / 100.0).toFixed(2);
-                    document.getElementById('val-volt').innerText = data.latest_measurement.volt.toFixed(2);
-                    document.getElementById('val-pressure').innerText = data.latest_measurement.press_bar.toFixed(3);
-                    document.getElementById('val-percent').innerText = data.latest_measurement.percent.toFixed(1);
-                    document.getElementById('bar-water').style.width = data.latest_measurement.percent + '%';
+                // Cập nhật thẻ Live từ mẫu mới nhất của backend (luôn luôn nạp để khi F5 không bị về 0)
+                if (data.latest_measurement) {
+                    const m = data.latest_measurement;
+                    document.getElementById('val-level').innerText = m.level_cm.toFixed(1);
+                    document.getElementById('val-level-m').innerText = (m.level_cm / 100.0).toFixed(2);
+                    document.getElementById('val-volt').innerText = m.volt.toFixed(2);
+                    document.getElementById('val-pressure').innerText = m.press_bar.toFixed(3);
+                    document.getElementById('val-percent').innerText = m.percent.toFixed(1);
+                    document.getElementById('bar-water').style.width = m.percent + '%';
+
+                    if (!isSystemLostData) {
+                        const isErr = (m.volt < appSettings.voltMin || m.volt > appSettings.voltMax);
+                        updateHysteresisAlertState(m.level_cm, m.volt, isErr);
+                    }
                 }
 
             } catch (e) {
@@ -897,6 +913,7 @@
             const nowEpoch = Date.now();
             const timeStr = formatFullDateTimeVN(nowEpoch);
             packetCount++;
+            localStorage.setItem('packetCount', packetCount);
             document.getElementById('val-count').innerText = packetCount.toLocaleString();
             const headerPacketEl = document.getElementById('val-header-packet-count');
             if (headerPacketEl) headerPacketEl.innerText = packetCount.toLocaleString();
@@ -922,6 +939,15 @@
                 document.getElementById('bar-water').style.width = percent + '%';
                 document.getElementById('val-pressure').innerText = pressureBar.toFixed(3);
                 document.getElementById('val-volt').innerText = voltVal.toFixed(2);
+
+                // Lưu trạng thái đo mới nhất vào localStorage để khi F5 không bị reset
+                localStorage.setItem('lastLiveMeasurement', JSON.stringify({
+                    level_cm: waterLevel,
+                    volt: voltVal,
+                    percent: percent,
+                    press_bar: pressureBar,
+                    is_error: isVoltageError
+                }));
 
                 // Cập nhật biểu đồ live 30 điểm
                 const shortTime = new Date(nowEpoch).toLocaleTimeString('vi-VN', { hour12: false });
@@ -1615,7 +1641,52 @@
             }
         });
 
+        async function initLiveChartFromBackend() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/data?limit=30&sort_order=desc`);
+                const json = await res.json();
+                if (json && json.data && json.data.length > 0) {
+                    const records = json.data.slice().reverse();
+                    sensorChart.data.labels = [];
+                    sensorChart.data.datasets[0].data = [];
+                    sensorChart.data.datasets[1].data = [];
+                    records.forEach(r => {
+                        const shortTime = new Date(r.received_at).toLocaleTimeString('vi-VN', { hour12: false });
+                        sensorChart.data.labels.push(shortTime);
+                        const isErr = (r.volt < appSettings.voltMin || r.volt > appSettings.voltMax);
+                        sensorChart.data.datasets[0].data.push(isErr ? null : r.level_cm);
+                        sensorChart.data.datasets[1].data.push(r.volt);
+                    });
+                    sensorChart.update('none');
+                }
+            } catch (e) {
+                console.debug('Chưa tải được 30 điểm live từ backend:', e);
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
+            // 1. Khôi phục ngay giá trị thẻ đo live từ localStorage khi F5
+            const savedLive = localStorage.getItem('lastLiveMeasurement');
+            if (savedLive) {
+                try {
+                    const m = JSON.parse(savedLive);
+                    document.getElementById('val-level').innerText = m.level_cm.toFixed(1);
+                    document.getElementById('val-level-m').innerText = (m.level_cm / 100.0).toFixed(2);
+                    document.getElementById('val-volt').innerText = m.volt.toFixed(2);
+                    document.getElementById('val-pressure').innerText = m.press_bar.toFixed(3);
+                    document.getElementById('val-percent').innerText = m.percent.toFixed(1);
+                    document.getElementById('bar-water').style.width = m.percent + '%';
+                    updateHysteresisAlertState(m.level_cm, m.volt, m.is_error || false);
+                } catch (e) {}
+            }
+
+            // 2. Khôi phục số lượng gói tin đã nhận từ localStorage khi F5
+            if (packetCount > 0) {
+                document.getElementById('val-count').innerText = packetCount.toLocaleString();
+                const headerEl = document.getElementById('val-header-packet-count');
+                if (headerEl) headerEl.innerText = packetCount.toLocaleString();
+            }
+
             flatpickrInstance = flatpickr("#filter-date", {
                 mode: "range",
                 conjunction: " đến ",
@@ -1639,6 +1710,7 @@
             updateThresholdLabels();
             checkBackendStatus();
             applyFilter();
+            initLiveChartFromBackend();
         });
     </script>
 </body>
