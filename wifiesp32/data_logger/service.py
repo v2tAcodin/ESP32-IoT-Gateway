@@ -748,6 +748,19 @@ def download_backup_file(filename):
     return jsonify({"error": "File backup không tồn tại"}), 404
 
 
+@app.route('/api/database/download', methods=['GET'])
+def download_database():
+    """Tải trực tiếp file CSDL SQLite rainfall_data.db hiện tại"""
+    if os.path.exists(DB_PATH):
+        return send_file(
+            DB_PATH,
+            mimetype="application/x-sqlite3",
+            as_attachment=True,
+            download_name="rainfall_data.db"
+        )
+    return jsonify({"error": "File CSDL không tồn tại"}), 404
+
+
 @app.route('/api/export.csv', methods=['GET'])
 def export_csv():
     """Xuất CSV kèm UTF-8 BOM để Excel đọc đúng tiếng Việt không bị lỗi font"""

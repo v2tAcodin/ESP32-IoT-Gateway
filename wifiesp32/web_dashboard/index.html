@@ -213,7 +213,7 @@
                     <!-- Khung Giờ Bắt Đầu -->
                     <div class="lg:col-span-2">
                         <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Từ Giờ</label>
-                        <select id="filter-hour-start" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+                        <select id="filter-hour-start" onchange="handleHourChange('start')" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
                             <option value="0" selected>00:00</option>
                             <option value="1">01:00</option>
                             <option value="2">02:00</option>
@@ -244,7 +244,7 @@
                     <!-- Khung Giờ Kết Thúc -->
                     <div class="lg:col-span-2">
                         <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Đến Giờ</label>
-                        <select id="filter-hour-end" onchange="applyFilter()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+                        <select id="filter-hour-end" onchange="handleHourChange('end')" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
                             <option value="0">00:59</option>
                             <option value="1">01:59</option>
                             <option value="2">02:59</option>
@@ -295,12 +295,15 @@
 
                     <!-- Các nút Xuất Excel & Thao Tác Backend -->
                     <div class="flex flex-wrap items-center gap-2">
-                        <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-lg font-bold transition shadow-lg flex items-center gap-1.5">
+                        <button id="btn-export-excel" onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-lg font-bold transition shadow-lg flex items-center gap-1.5" title="Xuất báo cáo 3 Sheet chi tiết chuẩn Excel (.xlsx)">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                            📗 Xuất Báo Cáo Excel (.xlsx)
+                            <span>📗 Xuất Excel (.xlsx)</span>
                         </button>
-                        <button onclick="exportToCSV()" class="bg-teal-700 hover:bg-teal-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition">
-                            📄 Xuất CSV (BOM UTF-8)
+                        <button id="btn-export-csv" onclick="exportToCSV()" class="bg-teal-700 hover:bg-teal-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition">
+                            📄 Xuất CSV (BOM)
+                        </button>
+                        <button id="btn-download-db" onclick="downloadDatabase()" class="bg-blue-700 hover:bg-blue-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5" title="Tải trực tiếp file CSDL SQLite (.db) về máy tính">
+                            💾 Tải File CSDL (.db)
                         </button>
                         <button onclick="generateSampleData()" class="bg-indigo-700/70 hover:bg-indigo-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition" title="Tạo 50 mẫu thử giả lập trên Backend">
                             🧪 Thử nghiệm (+50 mẫu)
@@ -466,7 +469,7 @@
                                class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500">
                     </div>
                     <p class="text-[11px] text-slate-400">
-                        * Mặc định kết nối máy chủ Cloud: <code class="text-cyan-300">https://esp32-iot-gateway.onrender.com</code> (hoạt động 24/7 toàn cầu).
+                        * Mặc định kết nối máy chủ Cloud 24/7: <code class="text-cyan-300">https://esp32-iot-gateway.onrender.com</code>. Khi mở qua mạng nội bộ Flask, hệ thống tự động nhận diện <code class="text-cyan-300">http://&lt;IP&gt;:5000</code>.
                     </p>
                 </div>
 
@@ -1015,8 +1018,47 @@
         // =====================================================================
         // 5. TRUY VẤN DỮ LIỆU TỪ BACKEND API (BẢNG, THỐNG KÊ, BIỂU ĐỒ)
         // =====================================================================
+        function handleHourChange(which) {
+            const hStartEl = document.getElementById('filter-hour-start');
+            const hEndEl = document.getElementById('filter-hour-end');
+            let hStart = parseInt(hStartEl.value, 10);
+            let hEnd = parseInt(hEndEl.value, 10);
+
+            if (which === 'start' && hStart > hEnd) {
+                hEndEl.value = String(hStart);
+            } else if (which === 'end' && hEnd < hStart) {
+                hStartEl.value = String(hEnd);
+            }
+
+            // Nếu ô ngày chưa có giá trị, tự động gán ngày hôm nay để lọc ngay theo giờ
+            const dateInput = document.getElementById('filter-date');
+            if (!dateInput.value || !dateInput.value.trim()) {
+                const now = new Date();
+                const pad = (n) => String(n).padStart(2, '0');
+                const todayStr = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
+                if (flatpickrInstance) {
+                    flatpickrInstance.setDate([now, now], false);
+                } else {
+                    dateInput.value = todayStr;
+                }
+            }
+
+            currentPage = 1;
+            applyFilter();
+        }
+
         function getDateRangeFromInput(val, hourStart, hourEnd) {
+            let hStart = Math.min(hourStart, hourEnd);
+            let hEnd = Math.max(hourStart, hourEnd);
+
             if (!val || !val.trim()) {
+                // Nếu chưa nhập ngày nhưng có chọn khung giờ khác 0-23 -> Mặc định lấy ngày hôm nay
+                if (hStart !== 0 || hEnd !== 23) {
+                    const now = new Date();
+                    const dStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hStart, 0, 0, 0);
+                    const dEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hEnd, 59, 59, 999);
+                    return { from_ts: dStart.getTime(), to_ts: dEnd.getTime() };
+                }
                 return { from_ts: null, to_ts: null };
             }
 
@@ -1050,15 +1092,15 @@
                 const startObj = parseDate(parts[0]);
                 const endObj = parseDate(parts[1]) || startObj;
                 if (startObj && endObj) {
-                    const dStart = new Date(startObj.year, startObj.month, startObj.day, hourStart, 0, 0, 0);
-                    const dEnd = new Date(endObj.year, endObj.month, endObj.day, hourEnd, 59, 59, 999);
+                    const dStart = new Date(startObj.year, startObj.month, startObj.day, hStart, 0, 0, 0);
+                    const dEnd = new Date(endObj.year, endObj.month, endObj.day, hEnd, 59, 59, 999);
                     return { from_ts: dStart.getTime(), to_ts: dEnd.getTime() };
                 }
             } else if (parts.length === 1) {
                 const dateObj = parseDate(parts[0]);
                 if (dateObj) {
-                    const dStart = new Date(dateObj.year, dateObj.month, dateObj.day, hourStart, 0, 0, 0);
-                    const dEnd = new Date(dateObj.year, dateObj.month, dateObj.day, hourEnd, 59, 59, 999);
+                    const dStart = new Date(dateObj.year, dateObj.month, dateObj.day, hStart, 0, 0, 0);
+                    const dEnd = new Date(dateObj.year, dateObj.month, dateObj.day, hEnd, 59, 59, 999);
                     return { from_ts: dStart.getTime(), to_ts: dEnd.getTime() };
                 }
             }
@@ -1081,8 +1123,12 @@
             const fmt = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
             const now = new Date();
 
-            document.getElementById('filter-hour-start').value = '0';
-            document.getElementById('filter-hour-end').value = '23';
+            // CỐ ĐỊNH KHUNG GIỜ: Giữ nguyên khung giờ người dùng đã chọn khi chuyển giữa các ngày,
+            // chỉ reset về 00:00 - 23:59 khi người dùng bấm "Tất cả thời gian"
+            if (type === 'all') {
+                document.getElementById('filter-hour-start').value = '0';
+                document.getElementById('filter-hour-end').value = '23';
+            }
 
             if (type === 'today') {
                 if (flatpickrInstance) {
@@ -1194,7 +1240,7 @@
                 }
             } catch (e) {
                 console.error('Lỗi nạp bảng CSDL:', e);
-                const tableBody = document.getElementById('table-body');
+                const tableBody = document.getElementById('preview-tbody');
                 if (tableBody) {
                     tableBody.innerHTML = `
                         <tr>
@@ -1202,8 +1248,7 @@
                                 <div class="max-w-md mx-auto space-y-2">
                                     <p class="text-rose-400 font-semibold text-sm">⚠️ Không thể kết nối tới máy chủ CSDL (${API_BASE_URL})</p>
                                     <p class="text-xs text-slate-400 leading-relaxed">
-                                        Nếu bạn đang mở từ máy tính khác trong mạng Wi-Fi, hãy vào <strong>⚙️ Cài Đặt</strong> để nhập IP máy chủ hoặc mở trực tiếp qua link: 
-                                        <br/><code class="text-cyan-300 font-mono">http://&lt;IP-Máy-Chủ-Chạy-Backend&gt;:5000</code>
+                                        Máy chủ Cloud hoặc mạng đang kết nối... Vui lòng thử lại sau vài giây hoặc kiểm tra tab Cài Đặt!
                                     </p>
                                 </div>
                             </td>
@@ -1339,40 +1384,138 @@
         }
 
         // =====================================================================
-        // 8. XUẤT BÁO CÁO QUA API BACKEND (EXCEL MULTI-SHEET & CSV BOM UTF-8)
+        // 8. XUẤT BÁO CÁO QUA API BACKEND (EXCEL MULTI-SHEET, CSV BOM & SQLITE DB)
         // =====================================================================
-        function exportToExcel() {
-            const selSource = document.getElementById('filter-source').value;
-            const selDateStr = document.getElementById('filter-date').value.trim();
-            const hourStart = parseInt(document.getElementById('filter-hour-start').value, 10);
-            const hourEnd = parseInt(document.getElementById('filter-hour-end').value, 10);
-            const { from_ts, to_ts } = getDateRangeFromInput(selDateStr, hourStart, hourEnd);
+        async function exportToExcel() {
+            const btn = document.getElementById('btn-export-excel');
+            const originalHtml = btn ? btn.innerHTML : '';
+            try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.classList.add('opacity-75');
+                    btn.innerHTML = `<svg class="w-4 h-4 animate-spin inline mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg> <span>Đang tạo Excel...</span>`;
+                }
 
-            const incSim = (selSource === 'ALL' || selSource === 'SIMULATED') ? 1 : 0;
-            const params = new URLSearchParams();
-            params.append('include_simulated', incSim);
-            if (from_ts) params.append('from', from_ts);
-            if (to_ts) params.append('to', to_ts);
+                const selSource = document.getElementById('filter-source').value;
+                const selDateStr = document.getElementById('filter-date').value.trim();
+                const hourStart = parseInt(document.getElementById('filter-hour-start').value, 10);
+                const hourEnd = parseInt(document.getElementById('filter-hour-end').value, 10);
+                const { from_ts, to_ts } = getDateRangeFromInput(selDateStr, hourStart, hourEnd);
 
-            window.location.href = `${API_BASE_URL}/api/export.xlsx?${params.toString()}`;
-            addLog('[EXCEL] Đã kích hoạt tải về file Báo Cáo Mực Nước Thủy Văn (.xlsx) từ Backend');
+                const incSim = (selSource === 'ALL' || selSource === 'SIMULATED') ? 1 : 0;
+                const params = new URLSearchParams();
+                params.append('include_simulated', incSim);
+                if (from_ts) params.append('from', from_ts);
+                if (to_ts) params.append('to', to_ts);
+
+                const res = await fetch(`${API_BASE_URL}/api/export.xlsx?${params.toString()}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+
+                const blob = await res.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = `Bao_Cao_Muc_Nuoc_Thuy_Van_${new Date().toISOString().slice(0, 10)}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                addLog('[EXCEL] Đã xuất và tải về thành công Báo Cáo Excel (.xlsx)');
+            } catch (err) {
+                console.error('Lỗi xuất Excel:', err);
+                alert(`Không thể xuất file Excel: ${err.message}\nVui lòng kiểm tra lại kết nối Backend.`);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-75');
+                    btn.innerHTML = originalHtml;
+                }
+            }
         }
 
-        function exportToCSV() {
-            const selSource = document.getElementById('filter-source').value;
-            const selDateStr = document.getElementById('filter-date').value.trim();
-            const hourStart = parseInt(document.getElementById('filter-hour-start').value, 10);
-            const hourEnd = parseInt(document.getElementById('filter-hour-end').value, 10);
-            const { from_ts, to_ts } = getDateRangeFromInput(selDateStr, hourStart, hourEnd);
+        async function exportToCSV() {
+            const btn = document.getElementById('btn-export-csv');
+            const originalHtml = btn ? btn.innerHTML : '';
+            try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.classList.add('opacity-75');
+                    btn.innerHTML = `<svg class="w-4 h-4 animate-spin inline mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg> <span>Đang tạo CSV...</span>`;
+                }
 
-            const incSim = (selSource === 'ALL' || selSource === 'SIMULATED') ? 1 : 0;
-            const params = new URLSearchParams();
-            params.append('include_simulated', incSim);
-            if (from_ts) params.append('from', from_ts);
-            if (to_ts) params.append('to', to_ts);
+                const selSource = document.getElementById('filter-source').value;
+                const selDateStr = document.getElementById('filter-date').value.trim();
+                const hourStart = parseInt(document.getElementById('filter-hour-start').value, 10);
+                const hourEnd = parseInt(document.getElementById('filter-hour-end').value, 10);
+                const { from_ts, to_ts } = getDateRangeFromInput(selDateStr, hourStart, hourEnd);
 
-            window.location.href = `${API_BASE_URL}/api/export.csv?${params.toString()}`;
-            addLog('[CSV] Đã kích hoạt tải về file CSV UTF-8 BOM từ Backend');
+                const incSim = (selSource === 'ALL' || selSource === 'SIMULATED') ? 1 : 0;
+                const params = new URLSearchParams();
+                params.append('include_simulated', incSim);
+                if (from_ts) params.append('from', from_ts);
+                if (to_ts) params.append('to', to_ts);
+
+                const res = await fetch(`${API_BASE_URL}/api/export.csv?${params.toString()}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+
+                const blob = await res.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = `Bao_Cao_Muc_Nuoc_Thuy_Van_${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                addLog('[CSV] Đã xuất và tải về thành công file CSV (BOM UTF-8)');
+            } catch (err) {
+                console.error('Lỗi xuất CSV:', err);
+                alert(`Không thể xuất file CSV: ${err.message}\nVui lòng kiểm tra lại kết nối Backend.`);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-75');
+                    btn.innerHTML = originalHtml;
+                }
+            }
+        }
+
+        async function downloadDatabase() {
+            const btn = document.getElementById('btn-download-db');
+            const originalHtml = btn ? btn.innerHTML : '';
+            try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.classList.add('opacity-75');
+                    btn.innerHTML = `<svg class="w-4 h-4 animate-spin inline mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg> <span>Đang nén tải...</span>`;
+                }
+
+                const res = await fetch(`${API_BASE_URL}/api/database/download`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+
+                const blob = await res.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = 'rainfall_data.db';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                addLog('[CSDL] Đã tải về file SQLite rainfall_data.db thành công!');
+            } catch (err) {
+                console.error('Lỗi tải file CSDL:', err);
+                alert(`Không thể tải file CSDL SQLite: ${err.message}\nVui lòng kiểm tra lại kết nối Backend.`);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-75');
+                    btn.innerHTML = originalHtml;
+                }
+            }
         }
 
         // =====================================================================
@@ -1844,7 +1987,7 @@
 
             updateThresholdLabels();
             checkBackendStatus();
-            applyFilter();
+            setQuickDate('today');
             syncLiveChartWithLatestRecords();
         });
     </script>
