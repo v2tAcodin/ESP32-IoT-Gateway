@@ -1663,32 +1663,62 @@
             }
         });
 
-        async function initLiveChartFromBackend() {
-            // Nếu đã có 30 điểm live giữ nguyên trong localStorage thì KHÔNG quét lại
-            if (sensorChart.data.labels && sensorChart.data.labels.length > 0) {
-                return;
-            }
+        async function syncLiveChartWithLatestRecords() {
             try {
                 const res = await fetch(`${API_BASE_URL}/api/data?limit=30&sort_order=desc`);
                 const json = await res.json();
                 if (json && json.data && json.data.length > 0) {
                     const records = json.data.slice().reverse();
-                    sensorChart.data.labels = [];
-                    sensorChart.data.datasets[0].data = [];
-                    sensorChart.data.datasets[1].data = [];
+                    const newLabels = [];
+                    const newLevel = [];
+                    const newVolt = [];
                     records.forEach(r => {
                         const shortTime = new Date(r.received_at).toLocaleTimeString('vi-VN', { hour12: false });
-                        sensorChart.data.labels.push(shortTime);
+                        newLabels.push(shortTime);
                         const isErr = (r.volt < appSettings.voltMin || r.volt > appSettings.voltMax);
-                        sensorChart.data.datasets[0].data.push(isErr ? null : r.level_cm);
-                        sensorChart.data.datasets[1].data.push(r.volt);
+                        newLevel.push(isErr ? null : r.level_cm);
+                        newVolt.push(r.volt);
                     });
+
+                    // Cập nhật trực tiếp 30 điểm đo thực tế mới nhất vào biểu đồ
+                    sensorChart.data.labels = newLabels;
+                    sensorChart.data.datasets[0].data = newLevel;
+                    sensorChart.data.datasets[1].data = newVolt;
                     sensorChart.update('none');
+
+                    // Đồng bộ tổng số mẫu vào bộ đếm
+                    if (json.total !== undefined) {
+                        packetCount = json.total;
+                        localStorage.setItem('packetCount', packetCount);
+                        document.getElementById('val-count').innerText = packetCount.toLocaleString();
+                        const headerEl = document.getElementById('val-header-packet-count');
+                        if (headerEl) headerEl.innerText = packetCount.toLocaleString();
+                    }
+
+                    // Đồng bộ thẻ Live với bản ghi mới nhất vừa lấy từ DB
+                    const latest = records[records.length - 1];
+                    if (latest) {
+                        document.getElementById('val-level').innerText = latest.level_cm.toFixed(1);
+                        document.getElementById('val-level-m').innerText = (latest.level_cm / 100.0).toFixed(2);
+                        document.getElementById('val-volt').innerText = latest.volt.toFixed(2);
+                        document.getElementById('val-pressure').innerText = latest.press_bar.toFixed(3);
+                        document.getElementById('val-percent').innerText = latest.percent.toFixed(1);
+                        document.getElementById('bar-water').style.width = latest.percent + '%';
+                        const isErr = (latest.volt < appSettings.voltMin || latest.volt > appSettings.voltMax);
+                        updateHysteresisAlertState(latest.level_cm, latest.volt, isErr);
+                    }
                 }
             } catch (e) {
-                console.debug('Chưa tải được 30 điểm live từ backend:', e);
+                console.debug('Lỗi đồng bộ 30 điểm live từ backend:', e);
             }
         }
+
+        // Tự động đồng bộ lại 30 điểm mới nhất khi người dùng mở lại tab hoặc quay lại tab sau khi ẩn
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                syncLiveChartWithLatestRecords();
+            }
+        });
 
         window.addEventListener('DOMContentLoaded', () => {
             // 1. Khôi phục ngay giá trị thẻ đo live từ localStorage khi F5
@@ -1736,7 +1766,7 @@
             updateThresholdLabels();
             checkBackendStatus();
             applyFilter();
-            initLiveChartFromBackend();
+            syncLiveChartWithLatestRecords();
         });
     </script>
 </body>
