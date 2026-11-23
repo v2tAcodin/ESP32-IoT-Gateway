@@ -57,11 +57,11 @@ void app_main(void)
 
     /*
      * 5. VÒNG LẶP THEO DÕI HỆ THỐNG (SYSTEM HEARTBEAT)
-     * Phát heartbeat mỗi 5 giây lên Cloud để Dashboard biết chắc chắn ESP32 đang online.
+     * Phát heartbeat mỗi 15 giây lên Cloud (Mức 2: tiết kiệm năng lượng)
      */
     char status_payload[128];
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(5000)); // Lặp lại mỗi 5 giây
+        vTaskDelay(pdMS_TO_TICKS(15000)); // Lặp lại mỗi 15 giây
         ESP_LOGI(TAG, "[HEARTBEAT] Free Heap: %lu bytes | Wi-Fi: %s | MQTT: %s | Goi tin: UART_RX=%lu, MQTT_PUB=%lu",
                  (unsigned long)esp_get_free_heap_size(),
                  wifi_app_is_connected() ? "CONNECTED" : "DISCONNECTED",

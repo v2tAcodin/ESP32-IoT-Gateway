@@ -83,7 +83,7 @@
         </section>
 
         <!-- PHẦN 1: THẺ HIỂN THỊ THÔNG SỐ LIVE (REAL-TIME) -->
-        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <!-- Thẻ 1: Mực Nước -->
             <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-cyan-500/50 transition">
                 <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mực Nước Hiện Tại</div>
@@ -99,22 +99,7 @@
                 </div>
             </div>
 
-            <!-- Thẻ 2: Tốc Độ Thay Đổi Mực Nước -->
-            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-emerald-500/50 transition">
-                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tốc Độ Thay Đổi Mực Nước</div>
-                <div class="mt-2 flex items-baseline gap-2">
-                    <span class="text-4xl md:text-5xl font-black text-emerald-400 font-mono tracking-tight" id="val-rate-cm-h">0.0</span>
-                    <span class="text-slate-400 font-medium text-lg">cm/h</span>
-                </div>
-                <div class="mt-2 text-xs text-slate-400">
-                    Tính từ $\Delta h / \Delta t$ liên tiếp
-                </div>
-                <div class="absolute right-3 top-3 opacity-10 text-emerald-400">
-                    <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24"><path d="M13 3l-4 7h6l-5 11 11-13h-6l5-5z"/></svg>
-                </div>
-            </div>
-
-            <!-- Thẻ 3: Áp Suất Thủy Tĩnh -->
+            <!-- Thẻ 2: Áp Suất Thủy Tĩnh -->
             <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-blue-500/50 transition">
                 <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Áp Suất Thủy Tĩnh</div>
                 <div class="mt-2 flex items-baseline gap-2">
@@ -132,7 +117,7 @@
                 </div>
             </div>
 
-            <!-- Thẻ 4: Điện Áp & Sức Khỏe Cảm Biến -->
+            <!-- Thẻ 3: Điện Áp & Sức Khỏe Cảm Biến -->
             <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-purple-500/50 transition">
                 <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Điện Áp Cảm Biến</div>
                 <div class="mt-2 flex items-baseline gap-2">
@@ -410,9 +395,6 @@
                                 <th onclick="sortTable('level_cm')" class="px-3.5 py-3 text-right cursor-pointer hover:text-cyan-400">
                                     Mực Nước (cm) <span id="sort-icon-level_cm"></span>
                                 </th>
-                                <th class="px-3.5 py-3 text-right cursor-pointer hover:text-cyan-400" title="Tốc độ thay đổi giữa 2 mẫu liên tiếp: Δh / Δt">
-                                    Tốc Độ Thay Đổi (cm/h)
-                                </th>
                                 <th onclick="sortTable('volt')" class="px-3.5 py-3 text-right cursor-pointer hover:text-cyan-400">
                                     Điện Áp (V) <span id="sort-icon-volt"></span>
                                 </th>
@@ -429,7 +411,7 @@
                         </thead>
                         <tbody id="preview-tbody" class="divide-y divide-slate-800">
                             <tr>
-                                <td colspan="8" class="text-center py-6 text-slate-500">
+                                <td colspan="7" class="text-center py-6 text-slate-500">
                                     Đang nạp dữ liệu từ Backend API...
                                 </td>
                             </tr>
@@ -925,13 +907,6 @@
                 let voltVal = data.volt !== undefined ? parseFloat(data.volt) : 0.0;
                 const isVoltageError = (voltVal < appSettings.voltMin || voltVal > appSettings.voltMax);
 
-                let rateCmPerHour = 0.0;
-                if (lastRealRecord && !isVoltageError) {
-                    const dtSec = (nowEpoch - lastRealRecord.timestamp) / 1000.0;
-                    if (dtSec >= 1.0) {
-                        rateCmPerHour = ((waterLevel - lastRealRecord.level) / dtSec) * 3600.0;
-                    }
-                }
                 if (!isVoltageError) {
                     lastRealRecord = { timestamp: nowEpoch, level: waterLevel };
                 }
@@ -943,7 +918,6 @@
 
                 document.getElementById('val-level').innerText = waterLevel.toFixed(1);
                 document.getElementById('val-level-m').innerText = (waterLevel / 100.0).toFixed(2);
-                document.getElementById('val-rate-cm-h').innerText = (rateCmPerHour >= 0 ? '+' : '') + rateCmPerHour.toFixed(1);
                 document.getElementById('val-percent').innerText = percent.toFixed(1);
                 document.getElementById('bar-water').style.width = percent + '%';
                 document.getElementById('val-pressure').innerText = pressureBar.toFixed(3);
@@ -1219,19 +1193,12 @@
         function renderTableRows(pageData, startIndex) {
             const tbody = document.getElementById('preview-tbody');
             if (!pageData || pageData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-500">Không có bản ghi nào phù hợp với bộ lọc hiện tại.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-slate-500">Không có bản ghi nào phù hợp với bộ lọc hiện tại.</td></tr>`;
                 return;
             }
 
             let html = '';
             pageData.forEach((r, idx) => {
-                let rateBadge = `<span class="text-slate-400 font-mono">0.0</span>`;
-                if (r.rate_cm_h > 0) {
-                    rateBadge = `<span class="text-rose-400 font-mono font-semibold">+${r.rate_cm_h.toFixed(1)} ↑</span>`;
-                } else if (r.rate_cm_h < 0) {
-                    rateBadge = `<span class="text-emerald-400 font-mono font-semibold">${r.rate_cm_h.toFixed(1)} ↓</span>`;
-                }
-
                 const isError = (r.volt < appSettings.voltMin || r.volt > appSettings.voltMax);
                 let statusBadge = '';
                 if (isError) {
@@ -1247,7 +1214,6 @@
                         <td class="px-3.5 py-2.5 font-mono text-slate-500">${startIndex + idx + 1}</td>
                         <td class="px-3.5 py-2.5 font-mono text-cyan-300 whitespace-nowrap">${r.datetime_str}</td>
                         <td class="px-3.5 py-2.5 text-right font-bold text-white font-mono">${r.level_cm.toFixed(1)}</td>
-                        <td class="px-3.5 py-2.5 text-right font-mono">${rateBadge}</td>
                         <td class="px-3.5 py-2.5 text-right font-mono ${isError ? 'text-rose-400 font-bold' : 'text-slate-300'}">${r.volt.toFixed(2)}</td>
                         <td class="px-3.5 py-2.5 text-right font-mono text-emerald-400">${r.press_bar.toFixed(3)}</td>
                         <td class="px-3.5 py-2.5 text-center font-mono text-blue-400">${r.percent.toFixed(1)}%</td>
