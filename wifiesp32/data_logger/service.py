@@ -47,7 +47,7 @@ MQTT_USE_TLS = os.getenv("MQTT_USE_TLS", "false").lower() in ("true", "1", "yes"
 
 TIMEOUT_MINUTES = float(os.getenv("TIMEOUT_MINUTES", 10.0))
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
-API_PORT = int(os.getenv("API_PORT", 5000))
+API_PORT = int(os.getenv("PORT", os.getenv("API_PORT", 5000)))
 DB_PATH = os.path.join(BASE_DIR, os.getenv("DB_PATH", "rainfall_data.db"))
 
 # Múi giờ Việt Nam (UTC+7)

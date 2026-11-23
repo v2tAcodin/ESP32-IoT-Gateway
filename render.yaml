@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: esp32-water-monitor
+    runtime: python
+    rootDir: wifiesp32/data_logger
+    buildCommand: pip install -r requirements.txt
+    startCommand: python service.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: MQTT_BROKER
+        value: broker.hivemq.com
+      - key: MQTT_PORT
+        value: 1883
+      - key: MQTT_TOPIC
+        value: my_iot_project/stm32_sensor_data
