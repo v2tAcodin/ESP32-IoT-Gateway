@@ -964,6 +964,7 @@
                 // Lưu ngay 30 điểm hiện tại vào localStorage để khi F5 giữ nguyên vẹn
                 try {
                     localStorage.setItem('cachedLiveChart', JSON.stringify({
+                        savedAt: Date.now(),
                         labels: sensorChart.data.labels,
                         level: sensorChart.data.datasets[0].data,
                         volt: sensorChart.data.datasets[1].data
@@ -1541,9 +1542,15 @@
         try {
             const cached = JSON.parse(localStorage.getItem('cachedLiveChart') || '{}');
             if (cached && Array.isArray(cached.labels) && cached.labels.length > 0) {
-                cachedLiveLabels = cached.labels;
-                cachedLiveLevel = cached.level || [];
-                cachedLiveVolt = cached.volt || [];
+                // Chỉ nạp lại cache cũ nếu vừa lưu dưới 20 giây (người dùng vừa nhấn F5 reload nhanh)
+                // Nếu tab đã tắt lâu hơn 20 giây, bỏ qua cache cũ để không bị khoảng trống thời gian,
+                // và để syncLiveChartWithLatestRecords() tải ngay 30 điểm đo thực tế mới nhất từ CSDL!
+                const isFresh = cached.savedAt && (Date.now() - cached.savedAt < 20000);
+                if (isFresh) {
+                    cachedLiveLabels = cached.labels;
+                    cachedLiveLevel = cached.level || [];
+                    cachedLiveVolt = cached.volt || [];
+                }
             }
         } catch (e) {}
 
@@ -1665,7 +1672,7 @@
 
         async function syncLiveChartWithLatestRecords() {
             try {
-                const res = await fetch(`${API_BASE_URL}/api/data?limit=30&sort_order=desc`);
+                const res = await fetch(`${API_BASE_URL}/api/measurements?limit=30&sort_order=desc`);
                 const json = await res.json();
                 if (json && json.data && json.data.length > 0) {
                     const records = json.data.slice().reverse();
@@ -1685,6 +1692,16 @@
                     sensorChart.data.datasets[0].data = newLevel;
                     sensorChart.data.datasets[1].data = newVolt;
                     sensorChart.update('none');
+
+                    // Cập nhật lại cache với mốc thời gian hiện tại
+                    try {
+                        localStorage.setItem('cachedLiveChart', JSON.stringify({
+                            savedAt: Date.now(),
+                            labels: newLabels,
+                            level: newLevel,
+                            volt: newVolt
+                        }));
+                    } catch (e) {}
 
                     // Đồng bộ tổng số mẫu vào bộ đếm
                     if (json.total !== undefined) {
@@ -1712,6 +1729,9 @@
                 console.debug('Lỗi đồng bộ 30 điểm live từ backend:', e);
             }
         }
+
+        // Gọi ngay lập tức khi khởi tạo biểu đồ để nạp 30 điểm đo mới nhất từ CSDL
+        syncLiveChartWithLatestRecords();
 
         // Tự động đồng bộ lại 30 điểm mới nhất khi người dùng mở lại tab hoặc quay lại tab sau khi ẩn
         document.addEventListener('visibilitychange', () => {
