@@ -47,13 +47,12 @@ void app_main(void)
      * 4. CHỜ KẾT NỐI WI-FI THÀNH CÔNG VÀ NHẬN IP
      * Khi đã có IP từ Router thì mới bắt đầu khởi động MQTT Client
      */
-    ESP_LOGI(TAG, "Dang cho ket noi Wi-Fi thanh cong de khoi tao MQTT...");
-    if (wifi_app_wait_for_connected(30000)) { // Chờ tối đa 30 giây
-        ESP_LOGI(TAG, "Wi-Fi da san sang! Tien hanh khoi tao MQTT Client...");
-        ESP_ERROR_CHECK(mqtt_app_init());
-    } else {
-        ESP_LOGE(TAG, "Timeout: Khong the ket noi Wi-Fi sau 30s. Vui long kiem tra lai SSID/PASS!");
+    ESP_LOGI(TAG, "Dang cho ket noi Wi-Fi thanh cong de khoi tao MQTT Client...");
+    while (!wifi_app_wait_for_connected(5000)) {
+        ESP_LOGW(TAG, "Van dang cho ket noi toi AP '%s'...", WIFI_SSID);
     }
+    ESP_LOGI(TAG, "Wi-Fi da san sang! Tien hanh khoi tao MQTT Client...");
+    ESP_ERROR_CHECK(mqtt_app_init());
 
     /*
      * 5. VÒNG LẶP THEO DÕI HỆ THỐNG (SYSTEM HEARTBEAT)

@@ -32,18 +32,19 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Wi-Fi khoi dong, bat dau ket noi toi: %s...", WIFI_SSID);
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_retry_num < WIFI_MAX_RETRY) {
-            esp_wifi_connect();
-            s_retry_num++;
-            ESP_LOGW(TAG, "Mat ket noi Wi-Fi, dang thu lai lan %d/%d...", s_retry_num, WIFI_MAX_RETRY);
-        } else {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-            ESP_LOGE(TAG, "Ket noi Wi-Fi that bai sau nhieu lan thu!");
-        }
+        wifi_event_sta_disconnected_t* disconn = (wifi_event_sta_disconnected_t*) event_data;
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        s_retry_num++;
+        // Tự động kết nối lại vô hạn (Auto-Reconnect):
+        // Không bao giờ bỏ cuộc, giúp ESP32 tự động bắt lại ngay khi điện thoại mang về phòng
+        ESP_LOGW(TAG, "Mat ket noi Wi-Fi (ly do: %d), dang thu lai lan %d (Auto-Reconnect)...",
+                 disconn ? disconn->reason : 0, s_retry_num);
+        esp_wifi_connect();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "===> DA KET NOI WI-FI THANH CONG! IP: " IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
+        xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }

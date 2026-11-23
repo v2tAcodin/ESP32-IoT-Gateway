@@ -15,7 +15,7 @@
 // tần 2.4GHz)
 #define WIFI_SSID "Android 22.1"
 #define WIFI_PASS "ngocuyenww"
-#define WIFI_MAX_RETRY 10
+// Chế độ Auto-Reconnect vô hạn: Tự động kết nối lại liên tục khi mất sóng Wi-Fi/Hotspot
 
 // 2. CẤU HÌNH MQTT CLOUD BROKER
 // Sử dụng HiveMQ Public Broker miễn phí, không cần đăng ký tài khoản lúc đầu
