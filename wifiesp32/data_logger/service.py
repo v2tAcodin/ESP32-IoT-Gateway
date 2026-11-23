@@ -284,6 +284,20 @@ def mqtt_worker_loop():
 app = Flask(__name__)
 CORS(app)  # Bật CORS cho phép Dashboard gọi API từ bất kỳ nguồn nào
 
+DASHBOARD_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'web_dashboard'))
+
+@app.route('/', methods=['GET'])
+def serve_index():
+    """Phục vụ trực tiếp giao diện Web Dashboard cho các máy trong mạng LAN hoặc trình duyệt"""
+    return send_from_directory(DASHBOARD_DIR, 'index.html')
+
+@app.route('/<path:filename>', methods=['GET'])
+def serve_static(filename):
+    """Phục vụ các file tĩnh nếu có trong thư mục web_dashboard"""
+    if os.path.exists(os.path.join(DASHBOARD_DIR, filename)):
+        return send_from_directory(DASHBOARD_DIR, filename)
+    return jsonify({"error": "File not found"}), 404
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     """
@@ -940,9 +954,21 @@ def export_excel():
 # 4. ĐIỂM KHỞI CHẠY HỆ THỐNG
 # ======================================================================================
 
+def get_local_lan_ip():
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
 def main():
     global g_is_running
 
+    local_ip = get_local_lan_ip()
     print("=" * 80)
     print("   HỆ THỐNG GIÁM SÁT MỰC NƯỚC IOT THỦY VĂN (BACKEND SERVICE V3.0)")
     print("=" * 80)
@@ -950,7 +976,8 @@ def main():
     print(f" • Lắng nghe Topic : {MQTT_TOPIC}")
     print(f" • Timeout Mất Tin : {TIMEOUT_MINUTES} phút")
     print(f" • CSDL SQLite     : {DB_PATH} (WAL mode)")
-    print(f" • REST API Server : http://localhost:{API_PORT}")
+    print(f" • Web Dashboard   : http://localhost:{API_PORT} (Trên máy tính này)")
+    print(f" • Mở từ máy khác  : http://{local_ip}:{API_PORT} (Trong cùng mạng Wi-Fi/LAN)")
     print("=" * 80)
 
     # 1. Khởi tạo CSDL SQLite & Migration

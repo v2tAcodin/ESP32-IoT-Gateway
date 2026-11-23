@@ -452,6 +452,24 @@
             </div>
 
             <div class="space-y-4 text-xs">
+                <!-- 0. Địa chỉ máy chủ Backend (CSDL & API) -->
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700 space-y-2">
+                    <div class="font-semibold text-slate-300 uppercase tracking-wider text-[11px] flex items-center justify-between">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+                            Máy Chủ Backend (API & CSDL SQLite)
+                        </span>
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1">Địa chỉ API Server (URL):</label>
+                        <input type="text" id="setting-backend-url" placeholder="Để trống nếu mở qua Flask, hoặc nhập http://IP:5000" 
+                               class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500">
+                    </div>
+                    <p class="text-[11px] text-slate-400">
+                        * Mặc định tự nhận diện khi mở qua <code class="text-cyan-300">http://&lt;IP&gt;:5000</code>. Khi mở qua GitHub Pages trên máy tính khác, hãy nhập IP máy chủ (VD: <code class="text-cyan-300">http://192.168.1.3:5000</code>).
+                    </p>
+                </div>
+
                 <!-- 1. Ngưỡng Cảnh báo & Hysteresis -->
                 <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700 space-y-3">
                     <div class="font-semibold text-slate-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
@@ -590,7 +608,6 @@
         // 1. CẤU HÌNH & BỘ NHỚ LƯU TRỮ BỀN VỮNG (SETTINGS)
         // =====================================================================
         const SETTINGS_STORAGE_KEY = 'WaterLevelDashboard_Settings_v3';
-        const API_BASE_URL = 'http://localhost:5000'; // Backend API Server
 
         const DEFAULT_SETTINGS = {
             thresholdWarn: 80.0,       // Ngưỡng cảnh báo (cm)
@@ -598,10 +615,26 @@
             hysteresis: 5.0,           // Độ trễ hysteresis (cm)
             voltMin: 0.08,             // Dưới 0.08V coi như đứt dây / ngắt cảm biến
             voltMax: 3.35,             // Trên 3.35V coi như chập mạch
-            timeoutMinutes: 10         // Quá 10 phút không có gói tin báo mất kết nối
+            timeoutMinutes: 10,        // Quá 10 phút không có gói tin báo mất kết nối
+            backendUrl: ''             // Địa chỉ backend tùy chỉnh (VD: http://192.168.1.3:5000)
         };
 
         let appSettings = loadSettings();
+
+        // Tự động nhận diện API_BASE_URL:
+        // 1. Nếu cấu hình thủ công trong Cài Đặt -> Dùng cấu hình đó
+        // 2. Nếu đang mở qua Flask server (cổng 5000) -> Tự động dùng window.location.origin
+        // 3. Mặc định dự phòng -> http://localhost:5000
+        function getApiBaseUrl() {
+            if (appSettings.backendUrl && appSettings.backendUrl.trim() !== '') {
+                return appSettings.backendUrl.trim().replace(/\/+$/, '');
+            }
+            if (window.location.port === '5000') {
+                return window.location.origin;
+            }
+            return 'http://localhost:5000';
+        }
+        let API_BASE_URL = getApiBaseUrl();
 
         function loadSettings() {
             try {
@@ -1156,9 +1189,29 @@
                     renderTableRows(tableData.data, tableData.offset);
                     updatePaginationControls(tableData.total, tableData.offset, tableData.data.length);
                     document.getElementById('db-count-badge').innerText = `${tableData.total.toLocaleString()} mẫu`;
+                } else {
+                    throw new Error('HTTP ' + resTable.status);
                 }
             } catch (e) {
-                console.error('Lỗi nạp bảng:', e);
+                console.error('Lỗi nạp bảng CSDL:', e);
+                const tableBody = document.getElementById('table-body');
+                if (tableBody) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="text-center py-8 text-slate-400">
+                                <div class="max-w-md mx-auto space-y-2">
+                                    <p class="text-rose-400 font-semibold text-sm">⚠️ Không thể kết nối tới máy chủ CSDL (${API_BASE_URL})</p>
+                                    <p class="text-xs text-slate-400 leading-relaxed">
+                                        Nếu bạn đang mở từ máy tính khác trong mạng Wi-Fi, hãy vào <strong>⚙️ Cài Đặt</strong> để nhập IP máy chủ hoặc mở trực tiếp qua link: 
+                                        <br/><code class="text-cyan-300 font-mono">http://&lt;IP-Máy-Chủ-Chạy-Backend&gt;:5000</code>
+                                    </p>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }
+                const countBadge = document.getElementById('db-count-badge');
+                if (countBadge) countBadge.innerText = `Chưa kết nối API`;
             }
         }
 
@@ -1471,6 +1524,7 @@
             document.getElementById('setting-volt-min').value = appSettings.voltMin;
             document.getElementById('setting-volt-max').value = appSettings.voltMax;
             document.getElementById('setting-timeout-min').value = appSettings.timeoutMinutes;
+            document.getElementById('setting-backend-url').value = appSettings.backendUrl || '';
             checkIndexedDBCount();
             document.getElementById('settings-modal').classList.remove('hidden');
         }
@@ -1486,11 +1540,16 @@
                 hysteresis: parseFloat(document.getElementById('setting-hysteresis').value) || 5.0,
                 voltMin: parseFloat(document.getElementById('setting-volt-min').value) || 0.08,
                 voltMax: parseFloat(document.getElementById('setting-volt-max').value) || 3.35,
-                timeoutMinutes: parseInt(document.getElementById('setting-timeout-min').value) || 10
+                timeoutMinutes: parseInt(document.getElementById('setting-timeout-min').value) || 10,
+                backendUrl: document.getElementById('setting-backend-url').value.trim()
             };
             saveSettings(newSettings);
+            API_BASE_URL = getApiBaseUrl();
             closeSettingsModal();
-            addLog(`[CÀI ĐẶT] Đã lưu cấu hình mới`);
+            addLog(`[CÀI ĐẶT] Đã lưu cấu hình mới (Backend: ${API_BASE_URL})`);
+            checkBackendStatus();
+            applyFilter();
+            syncLiveChartWithLatestRecords();
         }
 
         function resetSettingsToDefault() {
