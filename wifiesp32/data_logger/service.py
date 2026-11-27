@@ -21,8 +21,12 @@ import sqlite3
 import tempfile
 import threading
 import logging
+import encodings.idna  # Preload idna codec trên main thread để tránh LookupError trong gthread/MQTT thread
 from datetime import datetime, timezone, timedelta
 import io
+
+# Ép nạp bảng mã idna ngay trên main thread trước khi tạo bất kỳ worker thread nào
+"localhost".encode("idna")
 
 from dotenv import load_dotenv
 import paho.mqtt.client as mqtt
@@ -1204,12 +1208,15 @@ _bg_started = False
 
 
 def ensure_background_started():
-    """Khởi tạo CSDL SQLite và 1 luồng MQTT Background Worker duy nhất (an toàn cho Gunicorn --workers 1)"""
+    """Khởi tạo CSDL và 1 luồng MQTT Background Worker duy nhất (an toàn cho Gunicorn --workers 1)"""
     global _bg_started
     with _bg_started_lock:
         if _bg_started:
             return
-        init_database()
+        try:
+            init_database()
+        except Exception as e:
+            logging.exception(f"[CSDL INIT ERROR] Không thể khởi tạo CSDL lúc boot ({DB_ENGINE_LABEL}): {e}")
         mqtt_thread = threading.Thread(target=mqtt_worker_loop, daemon=True)
         mqtt_thread.start()
         _bg_started = True
