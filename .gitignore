@@ -27,6 +27,11 @@ Desktop.ini
 .DS_Store
 compile_commands.json
 
+# Secrets / Local Wi-Fi Credentials & Word temp locks
+wifiesp32/main/app_config.h
+.env
+~$*.docx
+
 # Python & Data Logger
 __pycache__/
 *.py[cod]

@@ -10,12 +10,15 @@ Bao gồm 3 thành phần chạy tích hợp:
 """
 
 import os
+import re
 import sys
+import hmac
 import time
 import math
 import json
 import shutil
 import sqlite3
+import tempfile
 import threading
 import logging
 from datetime import datetime, timezone, timedelta
@@ -26,6 +29,13 @@ import paho.mqtt.client as mqtt
 import pandas as pd
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
+
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    psycopg2 = None
+    RealDictCursor = None
 
 # Cấu hình logging
 logging.basicConfig(
@@ -45,10 +55,46 @@ MQTT_USERNAME = os.getenv("MQTT_USERNAME", "").strip() or None
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "").strip() or None
 MQTT_USE_TLS = os.getenv("MQTT_USE_TLS", "false").lower() in ("true", "1", "yes")
 
-TIMEOUT_MINUTES = float(os.getenv("TIMEOUT_MINUTES", 10.0))
+TIMEOUT_MINUTES = float(os.getenv("TIMEOUT_MINUTES", 2.0))
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("PORT", os.getenv("API_PORT", 5000)))
 DB_PATH = os.path.join(BASE_DIR, os.getenv("DB_PATH", "rainfall_data.db"))
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
+USE_POSTGRES = DATABASE_URL.startswith("postgresql://")
+DB_ENGINE_LABEL = "PostgreSQL (Supabase)" if USE_POSTGRES else "SQLite (WAL)"
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
+IS_RENDER_CLOUD = bool(os.getenv("RENDER", "").strip())
+
+BACKUP_FILENAME_RE = re.compile(r"^rainfall_data_backup_\d{8}_\d{6}\.db$")
+
+
+def require_admin_auth():
+    """
+    Kiểm tra mã quản trị (X-Admin-Token hoặc body.admin_token) cho các endpoint
+    thay đổi / xóa dữ liệu. Khi triển khai trên Render Cloud mà chưa cấu hình
+    ADMIN_API_KEY thì từ chối mặc định (fail-closed) để tránh bị xóa CSDL công khai.
+    """
+    if not ADMIN_API_KEY:
+        if IS_RENDER_CLOUD:
+            return jsonify({
+                "success": False,
+                "message": "Chức năng quản trị bị khóa trên Cloud vì chưa thiết lập biến môi trường ADMIN_API_KEY."
+            }), 403
+        return None
+
+    provided = (request.headers.get("X-Admin-Token") or "").strip()
+    if not provided:
+        body = request.get_json(silent=True) or {}
+        provided = str(body.get("admin_token") or "").strip()
+
+    if not provided or not hmac.compare_digest(provided, ADMIN_API_KEY):
+        return jsonify({
+            "success": False,
+            "message": "Sai hoặc thiếu mã quản trị (X-Admin-Token). Vui lòng nhập mã quản trị trong phần Cài Đặt."
+        }), 403
+    return None
 
 # Múi giờ Việt Nam (UTC+7)
 VN_TZ = timezone(timedelta(hours=7))
@@ -61,27 +107,170 @@ g_is_running = True
 g_mqtt_packet_counter = 0
 
 # ======================================================================================
-# 1. QUẢN LÝ CƠ SỞ DỮ LIỆU SQLITE (WAL MODE & AUTO-MIGRATION V3.0)
+# 1. QUẢN LÝ CƠ SỞ DỮ LIỆU ĐA CHẾ ĐỘ (SUPABASE POSTGRESQL HOẶC SQLITE WAL V3.0)
 # ======================================================================================
 
+class DualDBConnection:
+    """
+    Lớp bọc thống nhất cho cả PostgreSQL (Supabase) và SQLite (WAL):
+    - Tự động chuyển đổi placeholder '?' -> '%s' khi chạy PostgreSQL.
+    - Trả về các dòng dữ liệu truy cập được theo tên cột (r['level_cm']) và chỉ số (r[0]).
+    """
+    def __init__(self, raw_conn, is_pg=False):
+        self._conn = raw_conn
+        self.is_pg = is_pg
+
+    def _adapt_sql(self, sql):
+        return sql.replace("?", "%s") if self.is_pg else sql
+
+    def execute(self, sql, params=None):
+        adapted = self._adapt_sql(sql)
+        if self.is_pg:
+            cur = self._conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(adapted, params if params is not None else ())
+            return _DualCursor(cur, is_pg=True)
+        cur = self._conn.execute(adapted, params if params is not None else ())
+        return _DualCursor(cur, is_pg=False)
+
+    def executemany(self, sql, seq_of_params):
+        adapted = self._adapt_sql(sql)
+        if self.is_pg:
+            cur = self._conn.cursor()
+            cur.executemany(adapted, seq_of_params)
+            cur.close()
+        else:
+            self._conn.executemany(adapted, seq_of_params)
+
+    def cursor(self):
+        return self._conn.cursor()
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+
+class _DualRow(dict):
+    """Dòng dữ liệu hỗ trợ đồng thời r['col_name'] và r[0] cho cả PostgreSQL & SQLite."""
+    def __init__(self, mapping):
+        super().__init__(mapping)
+        self._values = list(mapping.values())
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        return super().__getitem__(key)
+
+
+class _DualCursor:
+    def __init__(self, cur, is_pg=False):
+        self._cur = cur
+        self.is_pg = is_pg
+
+    def fetchone(self):
+        row = self._cur.fetchone()
+        if row is None:
+            return None
+        return _DualRow(row) if self.is_pg else row
+
+    def fetchall(self):
+        rows = self._cur.fetchall()
+        if not self.is_pg:
+            return rows
+        return [_DualRow(r) for r in rows]
+
+
 def get_db_connection():
-    """Khởi tạo kết nối SQLite kích hoạt WAL mode và chế độ Row-factory"""
-    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
-    conn.execute("PRAGMA journal_mode = WAL;")
-    conn.execute("PRAGMA synchronous = NORMAL;")
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Khởi tạo kết nối Supabase PostgreSQL (nếu có DATABASE_URL) hoặc SQLite WAL cục bộ"""
+    if USE_POSTGRES:
+        if psycopg2 is None:
+            raise RuntimeError("Thiếu thư viện psycopg2-binary để kết nối Supabase PostgreSQL!")
+        dsn = DATABASE_URL
+        if "sslmode=" not in dsn:
+            sep = "&" if "?" in dsn else "?"
+            dsn = f"{dsn}{sep}sslmode=require"
+        raw_conn = psycopg2.connect(dsn, connect_timeout=10)
+        return DualDBConnection(raw_conn, is_pg=True)
+
+    raw_conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
+    raw_conn.execute("PRAGMA journal_mode = WAL;")
+    raw_conn.execute("PRAGMA synchronous = NORMAL;")
+    raw_conn.row_factory = sqlite3.Row
+    return DualDBConnection(raw_conn, is_pg=False)
+
+
+def export_current_db_to_sqlite_file(target_sqlite_path):
+    """Xuất toàn bộ bảng measurements hiện tại (từ Supabase hoặc SQLite) ra một file SQLite .db"""
+    if not USE_POSTGRES:
+        if os.path.exists(DB_PATH):
+            shutil.copy2(DB_PATH, target_sqlite_path)
+            return True
+        return False
+
+    conn = get_db_connection()
+    rows = conn.execute("SELECT id, received_at, level_cm, volt, percent, press_bar, raw_adc, is_simulated, created_at FROM measurements ORDER BY received_at ASC").fetchall()
+    conn.close()
+
+    if os.path.exists(target_sqlite_path):
+        os.remove(target_sqlite_path)
+    sq_conn = sqlite3.connect(target_sqlite_path)
+    sq_conn.execute('''
+        CREATE TABLE measurements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            received_at INTEGER NOT NULL,
+            level_cm REAL NOT NULL,
+            volt REAL NOT NULL,
+            percent REAL NOT NULL,
+            press_bar REAL NOT NULL,
+            raw_adc INTEGER NOT NULL,
+            is_simulated INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    sq_conn.executemany('''
+        INSERT INTO measurements (id, received_at, level_cm, volt, percent, press_bar, raw_adc, is_simulated, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', [
+        (r['id'], r['received_at'], r['level_cm'], r['volt'], r['percent'], r['press_bar'], r['raw_adc'], r['is_simulated'], str(r['created_at']))
+        for r in rows
+    ])
+    sq_conn.execute("CREATE INDEX IF NOT EXISTS idx_received_at ON measurements(received_at);")
+    sq_conn.execute("CREATE INDEX IF NOT EXISTS idx_simulated ON measurements(is_simulated);")
+    sq_conn.commit()
+    sq_conn.close()
+    return True
 
 
 def init_database():
     """
-    Khởi tạo bảng measurements chuẩn v3.0 và chạy di trú an toàn từ schema cũ (v1/v2).
-    Schema mới gồm: id, received_at, level_cm, volt, percent, press_bar, raw_adc, is_simulated, created_at
+    Khởi tạo bảng measurements chuẩn v3.0 trên Supabase PostgreSQL hoặc SQLite (có di trú tự động).
     """
     with g_db_lock:
         conn = get_db_connection()
-        cursor = conn.cursor()
 
+        if USE_POSTGRES:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS measurements (
+                    id BIGSERIAL PRIMARY KEY,
+                    received_at BIGINT NOT NULL,
+                    level_cm DOUBLE PRECISION NOT NULL,
+                    volt DOUBLE PRECISION NOT NULL,
+                    percent DOUBLE PRECISION NOT NULL,
+                    press_bar DOUBLE PRECISION NOT NULL,
+                    raw_adc INTEGER NOT NULL,
+                    is_simulated INTEGER DEFAULT 0,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_received_at ON measurements(received_at);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_simulated ON measurements(is_simulated);")
+            conn.commit()
+            conn.close()
+            logging.info("[CSDL] Kết nối & khởi tạo bảng measurements trên Supabase PostgreSQL thành công.")
+            return
+
+        cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='measurements'")
         table_exists = cursor.fetchone() is not None
 
@@ -89,7 +278,6 @@ def init_database():
             cursor.execute("PRAGMA table_info(measurements)")
             cols = [col[1] for col in cursor.fetchall()]
 
-            # Nếu bảng cũ thiếu received_at hoặc level_cm -> Chạy di trú
             if "received_at" not in cols or "level_cm" not in cols:
                 logging.info("[MIGRATION] Phát hiện CSDL cũ. Đang tự động di trú sang schema v3.0...")
                 cursor.execute('''
@@ -142,9 +330,8 @@ def init_database():
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-            logging.info("[CSDL] Khởi tạo bảng measurements v3.0 thành công.")
+            logging.info("[CSDL] Khởi tạo bảng measurements v3.0 (SQLite WAL) thành công.")
 
-        # Tạo Index phục vụ tối ưu hóa truy vấn thời gian và nguồn dữ liệu
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_received_at ON measurements(received_at);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_simulated ON measurements(is_simulated);")
 
@@ -348,6 +535,7 @@ def get_status():
     return jsonify({
         "status": status_text,
         "is_online": is_online,
+        "db_engine": DB_ENGINE_LABEL,
         "timeout_minutes": timeout_min,
         "elapsed_seconds": round(elapsed_sec, 1) if elapsed_sec is not None else None,
         "last_received_at": last_received_at,
@@ -616,6 +804,9 @@ def get_series():
 @app.route('/api/simulate', methods=['POST'])
 def create_simulated_samples():
     """Tạo nhanh 50 mẫu thử nghiệm giả lập (is_simulated = 1) vào CSDL SQLite"""
+    auth_err = require_admin_auth()
+    if auth_err:
+        return auth_err
     body = request.get_json(silent=True) or {}
     count = int(body.get('count', 50))
     count = max(1, min(count, 500))
@@ -661,6 +852,9 @@ def create_simulated_samples():
 @app.route('/api/import/indexeddb', methods=['POST'])
 def import_from_indexeddb():
     """Nhập một lần toàn bộ bản ghi cũ từ IndexedDB vào backend SQLite"""
+    auth_err = require_admin_auth()
+    if auth_err:
+        return auth_err
     body = request.get_json(silent=True) or {}
     records = body.get('records', [])
 
@@ -697,9 +891,12 @@ def import_from_indexeddb():
 def clear_database():
     """
     Xóa toàn bộ CSDL SQLite:
-    Yêu cầu gửi body {"confirm": "XOA"}.
+    Yêu cầu xác thực ADMIN_API_KEY và gửi body {"confirm": "XOA"}.
     Tự động tạo file backup trước khi xóa để phòng mất dữ liệu.
     """
+    auth_err = require_admin_auth()
+    if auth_err:
+        return auth_err
     body = request.get_json(silent=True) or {}
     confirm_text = body.get('confirm', '').strip().upper()
 
@@ -712,8 +909,7 @@ def clear_database():
     backup_path = os.path.join(BASE_DIR, backup_filename)
 
     with g_db_lock:
-        if os.path.exists(DB_PATH):
-            shutil.copy2(DB_PATH, backup_path)
+        if export_current_db_to_sqlite_file(backup_path):
             logging.info(f"[BACKUP] Đã tự động tạo bản sao lưu CSDL trước khi xóa: {backup_filename}")
 
         # 2. Xóa toàn bộ dữ liệu trong bảng measurements
@@ -722,13 +918,14 @@ def clear_database():
         conn.commit()
         conn.close()
 
-        # Thu gọn file CSDL (VACUUM ở chế độ autocommit)
-        try:
-            vac_conn = sqlite3.connect(DB_PATH, isolation_level=None)
-            vac_conn.execute("VACUUM")
-            vac_conn.close()
-        except Exception as e:
-            logging.debug(f"[VACUUM] {e}")
+        # Thu gọn file CSDL nếu đang dùng SQLite cục bộ
+        if not USE_POSTGRES:
+            try:
+                vac_conn = sqlite3.connect(DB_PATH, isolation_level=None)
+                vac_conn.execute("VACUUM")
+                vac_conn.close()
+            except Exception as e:
+                logging.debug(f"[VACUUM] {e}")
 
     logging.info("[CSDL] Đã xóa sạch dữ liệu bảng measurements thành công!")
     return jsonify({
@@ -741,24 +938,46 @@ def clear_database():
 
 @app.route('/api/backup/download/<filename>', methods=['GET'])
 def download_backup_file(filename):
-    """Tải về bản sao lưu CSDL SQLite"""
-    file_path = os.path.join(BASE_DIR, filename)
-    if os.path.exists(file_path):
-        return send_file(file_path, as_attachment=True, download_name=filename)
+    """Tải về bản sao lưu CSDL SQLite (chỉ cho phép tên tệp backup hợp lệ, chống Path Traversal)"""
+    safe_name = os.path.basename(filename)
+    if not BACKUP_FILENAME_RE.fullmatch(safe_name):
+        return jsonify({"error": "Tên tệp sao lưu không hợp lệ"}), 400
+    file_path = os.path.join(BASE_DIR, safe_name)
+    if os.path.isfile(file_path):
+        return send_file(file_path, mimetype="application/x-sqlite3", as_attachment=True, download_name=safe_name)
     return jsonify({"error": "File backup không tồn tại"}), 404
 
 
 @app.route('/api/database/download', methods=['GET'])
 def download_database():
-    """Tải trực tiếp file CSDL SQLite rainfall_data.db hiện tại"""
-    if os.path.exists(DB_PATH):
-        return send_file(
-            DB_PATH,
-            mimetype="application/x-sqlite3",
-            as_attachment=True,
-            download_name="rainfall_data.db"
-        )
-    return jsonify({"error": "File CSDL không tồn tại"}), 404
+    """Tải file CSDL SQLite rainfall_data.db (tự tạo bản snapshot .db nếu đang chạy Supabase PostgreSQL)"""
+    if not USE_POSTGRES:
+        if os.path.exists(DB_PATH):
+            return send_file(
+                DB_PATH,
+                mimetype="application/x-sqlite3",
+                as_attachment=True,
+                download_name="rainfall_data.db"
+            )
+        return jsonify({"error": "File CSDL không tồn tại"}), 404
+
+    with g_db_lock:
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".db", prefix="supabase_snapshot_")
+        os.close(tmp_fd)
+        try:
+            export_current_db_to_sqlite_file(tmp_path)
+            with open(tmp_path, "rb") as f:
+                buf = io.BytesIO(f.read())
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+    buf.seek(0)
+    return send_file(
+        buf,
+        mimetype="application/x-sqlite3",
+        as_attachment=True,
+        download_name="rainfall_data.db"
+    )
 
 
 @app.route('/api/export.csv', methods=['GET'])
@@ -784,8 +1003,9 @@ def export_csv():
     with g_db_lock:
         conn = get_db_connection()
         query = f"SELECT * FROM measurements{where_clause} ORDER BY received_at ASC"
-        df = pd.read_sql_query(query, conn, params=params)
+        rows = conn.execute(query, params).fetchall()
         conn.close()
+    df = pd.DataFrame([dict(r) for r in rows])
 
     if df.empty:
         df = pd.DataFrame(columns=["Thông Báo"])
@@ -856,8 +1076,9 @@ def export_excel():
     with g_db_lock:
         conn = get_db_connection()
         query = f"SELECT * FROM measurements{where_clause} ORDER BY received_at ASC"
-        df_raw = pd.read_sql_query(query, conn, params=params)
+        rows = conn.execute(query, params).fetchall()
         conn.close()
+    df_raw = pd.DataFrame([dict(r) for r in rows])
 
     excel_buffer = io.BytesIO()
 
@@ -978,6 +1199,27 @@ def get_local_lan_ip():
     except Exception:
         return "127.0.0.1"
 
+_bg_started_lock = threading.Lock()
+_bg_started = False
+
+
+def ensure_background_started():
+    """Khởi tạo CSDL SQLite và 1 luồng MQTT Background Worker duy nhất (an toàn cho Gunicorn --workers 1)"""
+    global _bg_started
+    with _bg_started_lock:
+        if _bg_started:
+            return
+        init_database()
+        mqtt_thread = threading.Thread(target=mqtt_worker_loop, daemon=True)
+        mqtt_thread.start()
+        _bg_started = True
+
+
+# Tự động khởi động nền khi chạy qua WSGI/Gunicorn (gunicorn --workers 1 service:app)
+if __name__ != "__main__":
+    ensure_background_started()
+
+
 def main():
     global g_is_running
 
@@ -988,19 +1230,15 @@ def main():
     print(f" • MQTT Broker     : {MQTT_BROKER}:{MQTT_PORT} (TLS: {MQTT_USE_TLS})")
     print(f" • Lắng nghe Topic : {MQTT_TOPIC}")
     print(f" • Timeout Mất Tin : {TIMEOUT_MINUTES} phút")
-    print(f" • CSDL SQLite     : {DB_PATH} (WAL mode)")
+    print(f" • CSDL hiện tại   : {DB_ENGINE_LABEL} ({'Supabase Cloud' if USE_POSTGRES else DB_PATH})")
     print(f" • Web Dashboard   : http://localhost:{API_PORT} (Trên máy tính này)")
     print(f" • Mở từ máy khác  : http://{local_ip}:{API_PORT} (Trong cùng mạng Wi-Fi/LAN)")
     print("=" * 80)
 
-    # 1. Khởi tạo CSDL SQLite & Migration
-    init_database()
+    # 1 & 2. Khởi tạo CSDL SQLite & MQTT Background Worker
+    ensure_background_started()
 
-    # 2. Khởi chạy MQTT Background Worker Thread
-    mqtt_thread = threading.Thread(target=mqtt_worker_loop, daemon=True)
-    mqtt_thread.start()
-
-    # 3. Khởi chạy Flask API Server
+    # 3. Khởi chạy Flask API Server (chế độ cục bộ)
     try:
         app.run(host=API_HOST, port=API_PORT, debug=False, use_reloader=False)
     except (KeyboardInterrupt, SystemExit):

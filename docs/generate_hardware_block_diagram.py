@@ -2,377 +2,275 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-def draw_hardware_block_diagram(output_path):
-    fig, ax = plt.subplots(figsize=(17, 9.5), dpi=300)
-    ax.set_facecolor("#F8FAFC")
-    fig.patch.set_facecolor("#F8FAFC")
+# IEEE / Academic Minimalist Styling
+plt.rcParams["font.family"] = "DejaVu Sans"
 
-    # =========================================================================
-    # 1. TIÊU ĐỀ & PHỤ ĐỀ SƠ ĐỒ
-    # =========================================================================
-    fig.suptitle(
-        "SƠ ĐỒ KHỐI KẾT NỐI PHẦN CỨNG HỆ THỐNG IOT GIÁM SÁT MỰC NƯỚC (STM32 & ESP32-C3)",
-        fontsize=16,
-        fontweight="bold",
-        color="#0F172A",
-        y=0.968
-    )
 
-    ax.text(
-        0.5, 0.932,
-        "Mô hình liên kết các khối phần cứng vật lý: Khối Cấp Nguồn • Khối Cảm Biến Thủy Tĩnh • Khối Đo Lường Biên (STM32) • Khối Gateway (ESP32) • Khối Thu Phát Vô Tuyến RF",
-        ha="center", va="center", fontsize=10, fontstyle="italic", color="#475569", transform=ax.transAxes
-    )
+def draw_gnd_symbol(ax, x, y, color="#1E293B", scale=1.0):
+    """Draw a standard IEC/IEEE electrical ground symbol at (x, y) in axes coordinates."""
+    w1, w2, w3 = 0.011 * scale, 0.007 * scale, 0.003 * scale
+    dy = 0.009 * scale
+    ax.plot([x, x], [y, y - dy], color=color, lw=1.4, transform=ax.transAxes, zorder=6)
+    ax.plot([x - w1, x + w1], [y - dy, y - dy], color=color, lw=1.6, transform=ax.transAxes, zorder=6)
+    ax.plot([x - w2, x + w2], [y - 2 * dy, y - 2 * dy], color=color, lw=1.4, transform=ax.transAxes, zorder=6)
+    ax.plot([x - w3, x + w3], [y - 3 * dy, y - 3 * dy], color=color, lw=1.2, transform=ax.transAxes, zorder=6)
 
-    # =========================================================================
-    # 2. HÀM VẼ KHỐI PHẦN CỨNG CHUYÊN NGHIỆP
-    # =========================================================================
-    def draw_module(x, y, w, h, title, subtitle, header_color, bg_color, items, border_color=None):
-        if not border_color:
-            border_color = header_color
-        
-        # Thân khối
-        body = patches.FancyBboxPatch(
-            (x, y), w, h,
-            boxstyle="round,pad=0.012,rounding_size=0.018",
-            facecolor=bg_color, edgecolor=border_color,
-            linewidth=1.8, transform=ax.transAxes, zorder=2
-        )
-        ax.add_patch(body)
 
-        # Thanh tiêu đề khối
-        header_h = 0.075
-        header = patches.FancyBboxPatch(
-            (x, y + h - header_h), w, header_h,
-            boxstyle="round,pad=0.012,rounding_size=0.018",
-            facecolor=header_color, edgecolor=header_color,
-            linewidth=1, transform=ax.transAxes, zorder=3
-        )
-        ax.add_patch(header)
-
-        # Chữ tiêu đề & phụ đề
-        ax.text(
-            x + w / 2.0, y + h - 0.026,
-            title,
-            ha="center", va="center", fontsize=9.2, fontweight="bold",
-            color="#FFFFFF", transform=ax.transAxes, zorder=4
-        )
-        ax.text(
-            x + w / 2.0, y + h - 0.053,
-            subtitle,
-            ha="center", va="center", fontsize=7.5, fontstyle="italic",
-            color="#F1F5F9", transform=ax.transAxes, zorder=4
-        )
-
-        # Các mục chi tiết bên trong khối
-        y_cursor = y + h - header_h - 0.024
-        for it in items:
-            badge_title, badge_desc, b_col, b_bg, badge_h = it
-            badge = patches.FancyBboxPatch(
-                (x + 0.010, y_cursor - badge_h), w - 0.020, badge_h,
-                boxstyle="round,pad=0.006,rounding_size=0.010",
-                facecolor=b_bg, edgecolor="#CBD5E1",
-                linewidth=0.8, transform=ax.transAxes, zorder=3
-            )
-            ax.add_patch(badge)
-            ax.text(
-                x + 0.018, y_cursor - 0.013,
-                badge_title,
-                ha="left", va="center", fontsize=7.6, fontweight="bold",
-                color=b_col, transform=ax.transAxes, zorder=4
-            )
-            ax.text(
-                x + 0.018, y_cursor - 0.029,
-                badge_desc,
-                ha="left", va="center", fontsize=6.8,
-                color="#475569", transform=ax.transAxes, zorder=4
-            )
-            y_cursor -= (badge_h + 0.011)
-
-    # =========================================================================
-    # 3. ĐỊNH NGHĨA TỌA ĐỘ VÀ VẼ CÁC KHỐI PHẦN CỨNG
-    # =========================================================================
-
-    x_col1 = 0.035   # Khối Nguồn & Cảm biến (w = 0.20)
-    w_col1 = 0.20
-
-    x_col2 = 0.295   # Khối STM32F103 (w = 0.27)
-    w_col2 = 0.27
-
-    x_col3 = 0.620   # Khối ESP32-C3 (w = 0.24)
-    w_col3 = 0.24
-
-    x_col4 = 0.885   # Khối RF Không Dây (w = 0.088)
-    w_col4 = 0.088
-
-    # --- KHỐI 1A: KHỐI CẤP NGUỒN ĐA MỨC (Y: 0.57 -> 0.89, H = 0.32) ---
-    draw_module(
-        x=x_col1, y=0.57, w=w_col1, h=0.32,
-        title="KHỐI CẤP NGUỒN ĐA MỨC",
-        subtitle="(POWER SUPPLY UNIT)",
-        header_color="#DC2626", bg_color="#FEF2F2",
-        items=[
-            ("Adapter 12V DC / 2A", "Nguồn nuôi công nghiệp cho đầu dò áp suất", "#DC2626", "#FFFFFF", 0.043),
-            ("Nguồn Cấp USB 5V DC", "Cấp cho bo STM32 và ESP32 qua cáp nạp", "#D97706", "#FFFFFF", 0.043),
-            ("Mạch Hạ Áp LDO 3.3V DC", "Cung cấp điện áp ổn định cho vi điều khiển", "#2563EB", "#FFFFFF", 0.043),
-            ("Tuyến Mass Chung (0V)", "Common GND liên kết đồng mức tham chiếu", "#0F172A", "#F1F5F9", 0.043)
-        ]
-    )
-
-    # --- KHỐI 1B: KHỐI CẢM BIẾN THỦY TĨNH (Y: 0.17 -> 0.49, H = 0.32) ---
-    draw_module(
-        x=x_col1, y=0.17, w=w_col1, h=0.32,
-        title="KHỐI CẢM BIẾN THỦY TĨNH",
-        subtitle="(SUBMERSIBLE LEVEL SENSOR)",
-        header_color="#0284C7", bg_color="#F0F9FF",
-        items=[
-            ("Chân Tín Hiệu: OUT (Analog)", "Điện áp ngõ ra tuyến tính 0.00V – 3.30V DC", "#D97706", "#FFFBEB", 0.044),
-            ("Đầu Dò Thả Chìm Inox 316L", "Màng silicon piezo-resistive (Pascal P=ρ·g·h)", "#0284C7", "#FFFFFF", 0.043),
-            ("Thang Đo Mực Nước: 0 – 5m", "Áp suất 0–0.5 Bar (0–500 cm nước)", "#0369A1", "#FFFFFF", 0.043),
-            ("Cực Nguồn Nuôi Cảm Biến", "Dây Đỏ (+12V DC) / Dây Đen (Mass GND)", "#DC2626", "#FFFFFF", 0.043)
-        ]
-    )
-
-    # --- KHỐI 2: KHỐI VI ĐIỀU KHIỂN XỬ LÝ BIÊN (STM32F103) (Y: 0.17 -> 0.89, H = 0.72) ---
-    # Chân PA0 được đặt ở vị trí thứ 6 để thẳng hàng tuyệt đối với Chân OUT của Cảm Biến
-    draw_module(
-        x=x_col2, y=0.17, w=w_col2, h=0.72,
-        title="KHỐI ĐO LƯỜNG & XỬ LÝ BIÊN",
-        subtitle="EDGE MCU: STM32F103C8T6 (ARM CORTEX-M3 @ 72 MHz)",
-        header_color="#0F766E", bg_color="#F0FDFA",
-        items=[
-            ("Bộ Xử Lý ARM Cortex-M3", "72 MHz, 64KB Flash, 20KB SRAM, DMA Engine", "#0F766E", "#FFFFFF", 0.042),
-            ("Cổng Nạp SWD (PA13/PA14)", "ST-Link V2 Programming & Debug thời gian thực", "#64748B", "#FFFFFF", 0.042),
-            ("Chân PC13 (Heartbeat LED)", "Nhấp nháy nhịp tim chu kỳ 1s (Active-Low)", "#E11D48", "#FFFFFF", 0.042),
-            ("Chân PA9 (USART1_TX)", "Truyền chuỗi JSON sang ESP32 (115200 8N1)", "#059669", "#ECFDF5", 0.045),
-            ("Chân PA10 (USART1_RX)", "Nhận lệnh phản hồi / cấu hình từ Gateway", "#2563EB", "#EFF6FF", 0.045),
-            ("Chân PA0 (ADC1_IN0)", "Nhận áp Analog 0–3.3V từ Cảm biến (12-bit ADC)", "#D97706", "#FFFBEB", 0.045),
-            ("Thuật Toán Xử Lý Số 4 Tầng", "Auto-Calib + Oversample 32x + Bù 0.12V + EMA", "#0F766E", "#FFFFFF", 0.042),
-            ("Chân Nguồn: 3.3V, 5V & GND", "Được bảo vệ chống ESD và chống sụt áp", "#0F172A", "#F1F5F9", 0.042)
-        ]
-    )
-
-    # --- KHỐI 3: KHỐI CẦU NỐI IOT GATEWAY (ESP32-C3) (Y: 0.17 -> 0.89, H = 0.72) ---
-    draw_module(
-        x=x_col3, y=0.17, w=w_col3, h=0.72,
-        title="KHỐI CẦU NỐI IOT GATEWAY",
-        subtitle="WIRELESS GATEWAY: ESP32-C3 (RISC-V @ 160 MHz)",
-        header_color="#4338CA", bg_color="#EEF2FF",
-        items=[
-            ("Lõi RISC-V 32-bit Single-Core", "160 MHz, 400KB SRAM, 4MB Flash tích hợp", "#4338CA", "#FFFFFF", 0.042),
-            ("Cổng USB Type-C (5V DC)", "Nguồn cấp và nạp Firmware / Log console", "#D97706", "#FFFFFF", 0.042),
-            ("Khối Wi-Fi 2.4 GHz RF MAC", "Baseband 802.11 b/g/n, công suất phát +20dBm", "#7C3AED", "#FAF5FF", 0.042),
-            ("Chân GPIO 4 (UART1_RX)", "Lắng nghe gói JSON từ STM32 (115200 8N1)", "#059669", "#ECFDF5", 0.045),
-            ("Chân GPIO 5 (UART1_TX)", "Phát lệnh điều khiển / ACK sang STM32", "#2563EB", "#EFF6FF", 0.045),
-            ("Bộ Đệm RingBuffer 2048 B", "FreeRTOS Task gom gói theo ký tự '\\n'", "#4338CA", "#FFFFFF", 0.042),
-            ("Ngăn Xếp Mạng LwIP & MQTT", "Client MQTT v3.1.1 (Topic: stm32_sensor_data)", "#B45309", "#FFFFFF", 0.042),
-            ("Chân Nguồn: 5V, 3.3V & GND", "Mass nối thông với Common Ground 0V", "#0F172A", "#F1F5F9", 0.042)
-        ]
-    )
-
-    # --- KHỐI 4: KHỐI THU PHÁT VÔ TUYẾN RF (Y: 0.28 -> 0.81, H = 0.53) ---
-    draw_module(
-        x=x_col4, y=0.28, w=w_col4, h=0.53,
-        title="KHỐI RF",
-        subtitle="WIRELESS",
-        header_color="#7C3AED", bg_color="#FAF5FF",
-        items=[
-            ("Ăng-ten PCB", "2.4 GHz tích hợp", "#7C3AED", "#FFFFFF", 0.043),
-            ("Wi-Fi STA", "802.11 b/g/n", "#7C3AED", "#FFFFFF", 0.043),
-            ("Phát Cloud", "HiveMQ Broker", "#B45309", "#FFFFFF", 0.043),
-            ("Mở Rộng:", "LoRa RFM95", "#64748B", "#FFFFFF", 0.043),
-            ("Băng Tần", "868 / 915 MHz", "#64748B", "#FFFFFF", 0.043)
-        ]
-    )
-
-    # =========================================================================
-    # 4. VẼ CÁC ĐƯỜNG KẾT NỐI VẬT LÝ & BUS GIAO TIẾP
-    # =========================================================================
-
-    # --- 4.1. Tuyến Nguồn +12V DC từ Khối Nguồn xuống Cảm biến ---
-    ax.annotate(
-        "", xy=(x_col1 + w_col1 / 2.0, 0.49), xytext=(x_col1 + w_col1 / 2.0, 0.57),
-        xycoords="axes fraction", textcoords="axes fraction",
-        arrowprops=dict(arrowstyle="->", color="#DC2626", lw=2.8)
-    )
-    ax.text(
-        x_col1 + w_col1 / 2.0, 0.530,
-        "ĐƯỜNG NGUỒN +12V DC (DÂY ĐỎ)",
-        color="#DC2626", fontsize=7.2, fontweight="bold", ha="center", va="center",
-        bbox=dict(boxstyle="round,pad=0.22", facecolor="#FEF2F2", edgecolor="#FECACA", lw=0.9),
-        zorder=5
-    )
-
-    # --- 4.2. Tuyến Nguồn 5V USB từ Khối Nguồn sang STM32 và ESP32 ---
-    ax.plot([x_col1 + w_col1, 0.260, 0.260, x_col2], [0.73, 0.73, 0.81, 0.81],
-            color="#D97706", lw=2.0, linestyle="-", transform=ax.transAxes, zorder=5)
-    ax.annotate(
-        "", xy=(x_col2, 0.81), xytext=(0.260, 0.81),
-        xycoords="axes fraction", textcoords="axes fraction",
-        arrowprops=dict(arrowstyle="->", color="#D97706", lw=2.0)
-    )
-    ax.text(
-        0.260, 0.835,
-        "+5V USB",
-        color="#D97706", fontsize=7.0, fontweight="bold", ha="center", va="center",
-        bbox=dict(boxstyle="round,pad=0.15", facecolor="#FFFBEB", edgecolor="#FDE68A", lw=0.8),
-        zorder=6
-    )
-
-    # --- 4.3. Tuyến Tín Hiệu Tương Tự (Analog) 0.00V - 3.30V (Sensor OUT -> STM32 PA0) ---
-    # Cả Sensor OUT và STM32 PA0 đều nằm ở Y ~ 0.38 (ĐƯỜNG NỐI THẲNG NGANG HOÀN TOÀN!)
-    y_analog = 0.382
-    ax.annotate(
-        "", xy=(x_col2, y_analog), xytext=(x_col1 + w_col1, y_analog),
-        xycoords="axes fraction", textcoords="axes fraction",
-        arrowprops=dict(arrowstyle="->", color="#D97706", lw=3.2),
-        zorder=5
-    )
-    ax.text(
-        (x_col1 + w_col1 + x_col2) / 2.0, y_analog + 0.044,
-        "TÍN HIỆU ANALOG 0–3.3V\n(Sensor OUT → PA0)",
-        color="#B45309", fontsize=7.2, fontweight="bold", ha="center", va="center",
-        bbox=dict(boxstyle="round,pad=0.25", facecolor="#FFFBEB", edgecolor="#F59E0B", lw=1.1),
-        zorder=6
-    )
-
-    # --- 4.4. Tuyến Truyền Thông UART PA9 (TX) -> GPIO 4 (RX) ---
-    # STM32 PA9 ở y ~ 0.54, ESP32 GPIO 4 ở y ~ 0.54 (ngang hàng chính xác!)
-    y_uart_tx = 0.54
-    ax.annotate(
-        "", xy=(x_col3, y_uart_tx), xytext=(x_col2 + w_col2, y_uart_tx),
-        xycoords="axes fraction", textcoords="axes fraction",
-        arrowprops=dict(arrowstyle="->", color="#059669", lw=3.2),
-        zorder=5
-    )
-    ax.text(
-        (x_col2 + w_col2 + x_col3) / 2.0, y_uart_tx + 0.046,
-        "BUS UART (3.3V CMOS)\nBaud 115200 8N1 (JSON)\n(PA9 TX → GPIO 4 RX)",
-        color="#047857", fontsize=7.2, fontweight="bold", ha="center", va="center",
-        bbox=dict(boxstyle="round,pad=0.25", facecolor="#ECFDF5", edgecolor="#10B981", lw=1.1),
-        zorder=6
-    )
-
-    # --- 4.5. Tuyến Phản Hồi UART Tùy Chọn GPIO 5 (TX) -> PA10 (RX) ---
-    # ESP32 GPIO 5 ở y ~ 0.44, STM32 PA10 ở y ~ 0.44 (ngang hàng chính xác!)
-    y_uart_rx = 0.44
-    ax.annotate(
-        "", xy=(x_col2 + w_col2, y_uart_rx), xytext=(x_col3, y_uart_rx),
-        xycoords="axes fraction", textcoords="axes fraction",
-        arrowprops=dict(arrowstyle="->", color="#2563EB", lw=2.0, linestyle="--"),
-        zorder=5
-    )
-    ax.text(
-        (x_col2 + w_col2 + x_col3) / 2.0, y_uart_rx - 0.038,
-        "Lệnh Phản Hồi / ACK\n(GPIO 5 TX → PA10 RX)",
-        color="#1D4ED8", fontsize=6.8, fontstyle="italic", ha="center", va="center",
-        bbox=dict(boxstyle="round,pad=0.18", facecolor="#EFF6FF", edgecolor="#93C5FD", lw=0.8),
-        zorder=6
-    )
-
-    # --- 4.6. Tuyến RF từ ESP32 sang Khối Ăng-ten và Sóng Ra Ngoài ---
-    y_rf = 0.65
-    ax.annotate(
-        "", xy=(x_col4, y_rf), xytext=(x_col3 + w_col3, y_rf),
-        xycoords="axes fraction", textcoords="axes fraction",
-        arrowprops=dict(arrowstyle="->", color="#7C3AED", lw=2.8),
-        zorder=5
-    )
-    ax.text(
-        (x_col3 + w_col3 + x_col4) / 2.0, y_rf + 0.034,
-        "Đường RF\n50Ω",
-        color="#7C3AED", fontsize=6.8, fontweight="bold", ha="center", va="center"
-    )
-
-    # Vẽ sóng vô tuyến phát ra ngoài không gian
-    for offset in [0.012, 0.024, 0.036]:
+def draw_antenna_symbol(ax, x, y, color="#1E3A5F"):
+    """Draw a crisp IEEE RF antenna symbol pointing upward from (x, y)."""
+    ax.plot([x, x], [y, y + 0.055], color=color, lw=1.8, transform=ax.transAxes, zorder=6)
+    ax.plot([x - 0.016, x, x + 0.016], [y + 0.078, y + 0.042, y + 0.078], color=color, lw=1.6, transform=ax.transAxes, zorder=6)
+    ax.plot([x - 0.016, x + 0.016], [y + 0.078, y + 0.078], color=color, lw=1.4, transform=ax.transAxes, zorder=6)
+    # Minimal RF arcs
+    for r in [0.022, 0.036]:
         arc = patches.Arc(
-            (x_col4 + w_col4 + 0.005, y_rf), offset * 2.2, offset * 2.2,
-            angle=0, theta1=-45, theta2=45,
-            color="#7C3AED", lw=2.2, transform=ax.transAxes
+            (x + 0.018, y + 0.068), r * 1.4, r * 2.1,
+            angle=0, theta1=-40, theta2=40,
+            color="#475569", lw=1.3, transform=ax.transAxes, zorder=6
         )
         ax.add_patch(arc)
+
+
+def draw_block(ax, x, y, w, h, title, subtitle, lines, accent="#1E3A5F", fill="#FFFFFF"):
+    """Draw an IEEE-style clean technical block with subtle top header strip."""
+    rect = patches.FancyBboxPatch(
+        (x, y), w, h,
+        boxstyle="round,pad=0.002,rounding_size=0.008",
+        facecolor=fill, edgecolor=accent, linewidth=1.6,
+        transform=ax.transAxes, zorder=3
+    )
+    ax.add_patch(rect)
+
+    # Header band
+    hh = 0.072
+    header = patches.Rectangle(
+        (x, y + h - hh), w, hh,
+        facecolor="#F1F5F9", edgecolor="none",
+        transform=ax.transAxes, zorder=3.5
+    )
+    ax.add_patch(header)
+    ax.plot([x, x + w], [y + h - hh, y + h - hh], color=accent, lw=1.0, transform=ax.transAxes, zorder=4)
+
     ax.text(
-        x_col4 + w_col4 + 0.032, y_rf,
-        "Sóng Wi-Fi\n2.4 GHz\n(STA Mode)",
-        color="#6D28D9", fontsize=7.4, fontweight="bold", ha="left", va="center", transform=ax.transAxes
-    )
-
-    # =========================================================================
-    # 5. TUYẾN MASS CHUNG (COMMON GROUND BUS - 0V)
-    # =========================================================================
-    bus_y = 0.118
-    # Đường bus ngang màu đen đậm ở đáy
-    ax.plot([0.015, 0.850], [bus_y, bus_y], color="#0F172A", lw=3.8, linestyle="-", transform=ax.transAxes, zorder=6)
-    
-    # 1. Từ Nguồn 12V / Adapter (Đi vòng ngoài bên trái: x=0.015, không cắt xuyên qua khối Cảm biến!)
-    ax.plot([x_col1, 0.015, 0.015], [0.60, 0.60, bus_y], color="#0F172A", lw=1.8, linestyle="--", transform=ax.transAxes, zorder=5)
-    ax.plot(0.015, bus_y, marker="o", color="#0F172A", markersize=6, transform=ax.transAxes, zorder=7)
-    ax.text(0.014, 0.45, "Mass 12V\n(0V DC)", color="#0F172A", fontsize=6.5, fontweight="bold", ha="right", va="center")
-
-    # 2. Từ Cảm Biến Thủy Tĩnh (Thả thẳng từ đáy khối Cảm biến)
-    x_gnd_sensor = x_col1 + w_col1 / 2.0
-    ax.plot([x_gnd_sensor, x_gnd_sensor], [0.17, bus_y], color="#0F172A", lw=1.8, linestyle="--", transform=ax.transAxes, zorder=5)
-    ax.plot(x_gnd_sensor, bus_y, marker="o", color="#0F172A", markersize=6, transform=ax.transAxes, zorder=7)
-
-    # 3. Từ STM32 (Thả thẳng từ đáy khối STM32)
-    x_gnd_stm32 = x_col2 + w_col2 / 2.0
-    ax.plot([x_gnd_stm32, x_gnd_stm32], [0.17, bus_y], color="#0F172A", lw=1.8, linestyle="--", transform=ax.transAxes, zorder=5)
-    ax.plot(x_gnd_stm32, bus_y, marker="o", color="#0F172A", markersize=6, transform=ax.transAxes, zorder=7)
-
-    # 4. Từ ESP32 (Thả thẳng từ đáy khối ESP32)
-    x_gnd_esp32 = x_col3 + w_col3 / 2.0
-    ax.plot([x_gnd_esp32, x_gnd_esp32], [0.17, bus_y], color="#0F172A", lw=1.8, linestyle="--", transform=ax.transAxes, zorder=5)
-    ax.plot(x_gnd_esp32, bus_y, marker="o", color="#0F172A", markersize=6, transform=ax.transAxes, zorder=7)
-
-    # Nhãn thanh Bus Mass chung với khung nền OPAQUE che đường kẻ bên dưới
-    ax.text(
-        0.440, bus_y,
-        "   THANH BUS MASS CHUNG TOÀN HỆ THỐNG (COMMON GROUND BUS: 0V REFERENCE)   ",
-        color="#0F172A", fontsize=8.0, fontweight="bold", ha="center", va="center",
-        bbox=dict(boxstyle="round,pad=0.28", facecolor="#E2E8F0", edgecolor="#334155", lw=1.4),
-        zorder=8
-    )
-
-    # =========================================================================
-    # 6. KHUNG LƯU Ý KỸ THUẬT PHẦN CỨNG BẮT BUỘC (BOTTOM NOTICE CALLOUT)
-    # =========================================================================
-    callout = patches.FancyBboxPatch(
-        (0.025, 0.018), 0.955, 0.065,
-        boxstyle="round,pad=0.01,rounding_size=0.012",
-        facecolor="#FEF3C7", edgecolor="#F59E0B",
-        linewidth=1.3, transform=ax.transAxes, zorder=2
-    )
-    ax.add_patch(callout)
-
-    notice_text = (
-        "QUY TẮC THIẾT KẾ PHẦN CỨNG BẮT BUỘC:\n"
-        "1. ĐẤU NỐI COMMON GND: Phải nối thông điểm 0V giữa Nguồn 12V, Cảm biến, STM32 và ESP32 để triệt tiêu nhiễu thả nổi và sai số đo ADC.\n"
-        "2. TƯƠNG THÍCH MỨC ĐIỆN ÁP: Tín hiệu cảm biến 0–3.3V tương thích trực tiếp ngõ vào PA0 (ADC 12-bit); Giao tiếp UART PA9 ↔ GPIO 4 chuẩn 3.3V CMOS an toàn 100%."
+        x + w / 2, y + h - 0.025, title,
+        ha="center", va="center", fontsize=9.2, fontweight="bold",
+        color="#0F172A", transform=ax.transAxes, zorder=5
     )
     ax.text(
-        0.5, 0.050,
-        notice_text,
-        ha="center", va="center", fontsize=7.5, fontweight="bold", color="#92400E", transform=ax.transAxes, zorder=3
+        x + w / 2, y + h - 0.052, subtitle,
+        ha="center", va="center", fontsize=7.6, fontstyle="italic",
+        color="#475569", transform=ax.transAxes, zorder=5
     )
 
-    # =========================================================================
-    # 7. HOÀN THIỆN VÀ XUẤT FILE
-    # =========================================================================
-    ax.set_xlim(0, 1.05)
+    # Concise technical bullet specs
+    if lines:
+        usable_h = h - hh - 0.032
+        step = usable_h / max(len(lines), 1)
+        y_top = y + h - hh - 0.022 - step / 2
+        for i, line in enumerate(lines):
+            ax.text(
+                x + 0.014, y_top - i * step, f"• {line}",
+                ha="left", va="center", fontsize=8.0, color="#1E293B",
+                transform=ax.transAxes, zorder=5
+            )
+
+
+def draw_hardware_block_diagram(output_path):
+    fig, ax = plt.subplots(figsize=(13.5, 6.2), dpi=300)
+    fig.patch.set_facecolor("#FFFFFF")
+    ax.set_facecolor("#FFFFFF")
+
+    # Subtle top title
+    ax.text(
+        0.5, 0.955,
+        "SƠ ĐỒ KHỐI PHẦN CỨNG HỆ THỐNG GIÁM SÁT MỰC NƯỚC IOT (STM32F103 & ESP32-C3)",
+        ha="center", va="center", fontsize=11.5, fontweight="bold",
+        color="#0F172A", transform=ax.transAxes
+    )
+
+    # Block coordinates (strict horizontal alignment, plenty of whitespace)
+    # Power block (top-left)
+    px, py, pw, ph = 0.04, 0.62, 0.21, 0.25
+    draw_block(
+        ax, px, py, pw, ph,
+        "KHỐI CẤP NGUỒN", "Power Supply Unit",
+        ["Adapter 12V DC / 2A", "USB 5V & LDO 3.3V", "Mass chung (0V GND)"],
+        accent="#334155", fill="#FFFFFF"
+    )
+
+    # Sensor block (bottom-left)
+    sx, sy, sw, sh = 0.04, 0.22, 0.21, 0.28
+    draw_block(
+        ax, sx, sy, sw, sh,
+        "CẢM BIẾN THỦY TĨNH", "Submersible Level Sensor",
+        ["Dải đo: 0 – 5 m (0–0.5 Bar)", "Nguồn nuôi: +12V DC", "Ngõ ra: 0.00 – 3.30V DC"],
+        accent="#1E3A5F", fill="#FFFFFF"
+    )
+
+    # STM32 Edge MCU (center-left)
+    mx, my, mw, mh = 0.34, 0.22, 0.24, 0.56
+    draw_block(
+        ax, mx, my, mw, mh,
+        "VI ĐIỀU KHIỂN BIÊN", "STM32F103C8T6 (8 MHz HSI)",
+        [
+            "ADC1_IN0 (PA0, 12-bit)",
+            "Oversampling 32× (100 ms)",
+            "Bù điểm 0 (0.12V) + Deadband",
+            "Lọc Adaptive EMA (α=0.80/0.15)",
+            "USART1_TX (PA9, 5s/gói JSON)",
+            "LED trạng thái (PC13)"
+        ],
+        accent="#1E3A5F", fill="#FFFFFF"
+    )
+
+    # ESP32-C3 Gateway (center-right)
+    ex, ey, ew, eh = 0.67, 0.22, 0.22, 0.56
+    draw_block(
+        ax, ex, ey, ew, eh,
+        "IOT GATEWAY", "ESP32-C3 (RISC-V 160 MHz)",
+        [
+            "UART1_RX (GPIO 4, 2KB Buf)",
+            "Robust JSON Parser & Lọc rác",
+            "Wi-Fi STA Auto-Reconnect",
+            "MQTT v3.1.1 (QoS 1)",
+            "Heartbeat 15s & LWT",
+            "USB-CDC Debug (COM7)"
+        ],
+        accent="#1E3A5F", fill="#FFFFFF"
+    )
+
+    # RF Antenna & Cloud Output (far right)
+    ant_x, ant_y = 0.945, 0.50
+    draw_antenna_symbol(ax, ant_x, ant_y)
+    ax.text(
+        ant_x, ant_y - 0.04, "Wi-Fi 2.4 GHz\n(802.11 b/g/n)",
+        ha="center", va="top", fontsize=7.8, fontweight="bold", color="#1E3A5F", transform=ax.transAxes
+    )
+    ax.text(
+        ant_x, ant_y - 0.135, "MQTT Cloud\n(HiveMQ /\nRender 24/7)",
+        ha="center", va="top", fontsize=7.5, color="#475569", transform=ax.transAxes
+    )
+
+    # ================= ORTHOGONAL INTERCONNECTIONS =================
+    # 1. Power -> Sensor (+12V DC)
+    x_mid_left = px + pw / 2
+    ax.annotate(
+        "", xy=(x_mid_left, sy + sh), xytext=(x_mid_left, py),
+        xycoords="axes fraction", textcoords="axes fraction",
+        arrowprops=dict(arrowstyle="-|>", color="#991B1B", lw=1.8), zorder=5
+    )
+    ax.text(
+        x_mid_left + 0.012, (py + sy + sh) / 2, "+12V DC",
+        ha="left", va="center", fontsize=8.0, fontweight="bold", color="#991B1B", transform=ax.transAxes
+    )
+
+    # 2. Power -> STM32 & ESP32 (+5V / 3.3V bus routed cleanly above MCU blocks)
+    y_pwr_bus = 0.855
+    ax.plot([px + pw, mx + mw / 2, ex + ew / 2], [y_pwr_bus, y_pwr_bus, y_pwr_bus],
+            color="#334155", lw=1.4, linestyle="--", transform=ax.transAxes, zorder=4)
+    # Connect power block right edge at y=0.855? Power block top is 0.87, so y=0.84 is inside!
+    # Let's use y=0.84 for clean horizontal exit from Power Block
+    ax.lines[-1].remove()
+    y_pwr_bus = 0.835
+    ax.plot([px + pw, ex + ew / 2], [y_pwr_bus, y_pwr_bus], color="#475569", lw=1.4, linestyle="--", transform=ax.transAxes, zorder=4)
+    ax.annotate("", xy=(mx + mw / 2, my + mh), xytext=(mx + mw / 2, y_pwr_bus),
+                xycoords="axes fraction", textcoords="axes fraction",
+                arrowprops=dict(arrowstyle="-|>", color="#475569", lw=1.4, linestyle="--"), zorder=5)
+    ax.annotate("", xy=(ex + ew / 2, ey + eh), xytext=(ex + ew / 2, y_pwr_bus),
+                xycoords="axes fraction", textcoords="axes fraction",
+                arrowprops=dict(arrowstyle="-|>", color="#475569", lw=1.4, linestyle="--"), zorder=5)
+    ax.plot(mx + mw / 2, y_pwr_bus, marker="o", markersize=4, color="#475569", transform=ax.transAxes, zorder=6)
+    ax.text(
+        (px + pw + mx + mw / 2) / 2, y_pwr_bus + 0.022, "Nguồn 5V USB / 3.3V LDO",
+        ha="center", va="bottom", fontsize=7.8, color="#475569", transform=ax.transAxes
+    )
+
+    # 3. Sensor -> STM32 (Analog 0 - 3.3V)
+    y_sig = sy + sh / 2
+    ax.annotate(
+        "", xy=(mx, y_sig), xytext=(sx + sw, y_sig),
+        xycoords="axes fraction", textcoords="axes fraction",
+        arrowprops=dict(arrowstyle="-|>", color="#0F172A", lw=2.0), zorder=5
+    )
+    ax.text(
+        (sx + sw + mx) / 2, y_sig + 0.028, "Analog 0–3.3V",
+        ha="center", va="bottom", fontsize=8.0, fontweight="bold", color="#0F172A", transform=ax.transAxes
+    )
+    ax.text(
+        (sx + sw + mx) / 2, y_sig - 0.025, "OUT → PA0",
+        ha="center", va="top", fontsize=7.4, color="#475569", transform=ax.transAxes
+    )
+
+    # 4. STM32 -> ESP32 (UART1 TX -> RX)
+    y_uart1 = 0.54
+    ax.annotate(
+        "", xy=(ex, y_uart1), xytext=(mx + mw, y_uart1),
+        xycoords="axes fraction", textcoords="axes fraction",
+        arrowprops=dict(arrowstyle="-|>", color="#1E3A5F", lw=2.0), zorder=5
+    )
+    ax.text(
+        (mx + mw + ex) / 2, y_uart1 + 0.025, "UART1 (JSON)",
+        ha="center", va="bottom", fontsize=8.0, fontweight="bold", color="#1E3A5F", transform=ax.transAxes
+    )
+    ax.text(
+        (mx + mw + ex) / 2, y_uart1 - 0.022, "115200 8N1\nPA9 → GPIO 4",
+        ha="center", va="top", fontsize=7.2, color="#475569", transform=ax.transAxes
+    )
+
+    # 5. ESP32 -> STM32 (Optional UART feedback)
+    y_uart2 = 0.36
+    ax.annotate(
+        "", xy=(mx + mw, y_uart2), xytext=(ex, y_uart2),
+        xycoords="axes fraction", textcoords="axes fraction",
+        arrowprops=dict(arrowstyle="-|>", color="#64748B", lw=1.3, linestyle="--"), zorder=5
+    )
+    ax.text(
+        (mx + mw + ex) / 2, y_uart2 - 0.020, "GPIO 5 → PA10\n(Tùy chọn)",
+        ha="center", va="top", fontsize=7.0, fontstyle="italic", color="#64748B", transform=ax.transAxes
+    )
+
+    # 6. ESP32 -> RF Antenna (50 Ohm)
+    ax.annotate(
+        "", xy=(ant_x, ant_y), xytext=(ex + ew, ant_y),
+        xycoords="axes fraction", textcoords="axes fraction",
+        arrowprops=dict(arrowstyle="-", color="#1E3A5F", lw=1.8), zorder=5
+    )
+    ax.text(
+        (ex + ew + ant_x) / 2, ant_y + 0.022, "RF 50Ω",
+        ha="center", va="bottom", fontsize=7.5, fontweight="bold", color="#1E3A5F", transform=ax.transAxes
+    )
+
+    # ================= COMMON GROUND BUS (0V REFERENCE) =================
+    y_gnd = 0.115
+    ax.plot([0.02, ex + ew / 2], [y_gnd, y_gnd], color="#0F172A", lw=2.0, transform=ax.transAxes, zorder=5)
+
+    # Power GND routed cleanly on far left (x=0.02)
+    ax.plot([px, 0.02, 0.02], [py + 0.04, py + 0.04, y_gnd], color="#0F172A", lw=1.3, transform=ax.transAxes, zorder=5)
+    ax.plot(0.02, y_gnd, marker="o", markersize=4, color="#0F172A", transform=ax.transAxes, zorder=6)
+
+    # Drop lines from Sensor, STM32, ESP32
+    for gx in [sx + sw / 2, mx + mw / 2, ex + ew / 2]:
+        ax.plot([gx, gx], [0.22, y_gnd], color="#0F172A", lw=1.3, transform=ax.transAxes, zorder=5)
+        ax.plot(gx, y_gnd, marker="o", markersize=4, color="#0F172A", transform=ax.transAxes, zorder=6)
+
+    draw_gnd_symbol(ax, 0.46, y_gnd, color="#0F172A", scale=1.05)
+    ax.text(
+        0.46, 0.038, "TUYẾN MASS CHUNG TOÀN HỆ THỐNG (COMMON GND — 0V REFERENCE)",
+        ha="center", va="center", fontsize=8.0, fontweight="bold", color="#334155", transform=ax.transAxes
+    )
+
+    ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis("off")
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="#FFFFFF")
     plt.close()
-    print(f"Generated hardware connection block diagram successfully at: {output_path}")
+    print(f"Generated IEEE-style hardware block diagram: {output_path}")
+
 
 if __name__ == "__main__":
     out_dir = r"D:\Embedded\esp32\docs"
-    out_file = os.path.join(out_dir, "hardware_block_diagram.png")
-    draw_hardware_block_diagram(out_file)
-    # Đồng thời ghi đè lên system_block_diagram.png để mọi liên kết cũ cũng tự động cập nhật
+    draw_hardware_block_diagram(os.path.join(out_dir, "hardware_block_diagram.png"))
     draw_hardware_block_diagram(os.path.join(out_dir, "system_block_diagram.png"))
-    # Và cả ở thư mục gốc esp32 nếu có
     if os.path.exists(r"D:\Embedded\esp32\system_block_diagram.png"):
         draw_hardware_block_diagram(r"D:\Embedded\esp32\system_block_diagram.png")

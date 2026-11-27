@@ -468,6 +468,11 @@
                         <input type="text" id="setting-backend-url" placeholder="https://esp32-iot-gateway.onrender.com" 
                                class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500">
                     </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1">Mã Quản Trị API (Admin Token — dùng cho Xóa CSDL / Thử nghiệm):</label>
+                        <input type="password" id="setting-admin-token" placeholder="Nhập ADMIN_API_KEY đã cấu hình trên Render (nếu có)" 
+                               class="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500">
+                    </div>
                     <p class="text-[11px] text-slate-400">
                         * Mặc định kết nối máy chủ Cloud 24/7: <code class="text-cyan-300">https://esp32-iot-gateway.onrender.com</code>. Khi mở qua mạng nội bộ Flask, hệ thống tự động nhận diện <code class="text-cyan-300">http://&lt;IP&gt;:5000</code>.
                     </p>
@@ -618,8 +623,9 @@
             hysteresis: 5.0,           // Độ trễ hysteresis (cm)
             voltMin: 0.08,             // Dưới 0.08V coi như đứt dây / ngắt cảm biến
             voltMax: 3.35,             // Trên 3.35V coi như chập mạch
-            timeoutMinutes: 10,        // Quá 10 phút không có gói tin báo mất kết nối
-            backendUrl: ''             // Địa chỉ backend tùy chỉnh (VD: http://192.168.1.3:5000)
+            timeoutMinutes: 2,         // Quá 2 phút không có gói tin báo mất kết nối
+            backendUrl: '',            // Địa chỉ backend tùy chỉnh (VD: http://192.168.1.3:5000)
+            adminToken: ''             // Mã quản trị gửi qua header X-Admin-Token
         };
 
         let appSettings = loadSettings();
@@ -1051,13 +1057,18 @@
             let hStart = Math.min(hourStart, hourEnd);
             let hEnd = Math.max(hourStart, hourEnd);
 
+            // Chuyển ngày/giờ theo chuẩn múi giờ Việt Nam (UTC+7), độc lập với múi giờ máy người xem
+            const toVnStartMs = (y, m, d, h) => Date.UTC(y, m, d, h - 7, 0, 0, 0);
+            const toVnEndMs   = (y, m, d, h) => Date.UTC(y, m, d, h - 7, 59, 59, 999);
+
             if (!val || !val.trim()) {
-                // Nếu chưa nhập ngày nhưng có chọn khung giờ khác 0-23 -> Mặc định lấy ngày hôm nay
+                // Nếu chưa nhập ngày nhưng có chọn khung giờ khác 0-23 -> Mặc định lấy ngày hôm nay (UTC+7)
                 if (hStart !== 0 || hEnd !== 23) {
-                    const now = new Date();
-                    const dStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hStart, 0, 0, 0);
-                    const dEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hEnd, 59, 59, 999);
-                    return { from_ts: dStart.getTime(), to_ts: dEnd.getTime() };
+                    const vnNow = new Date(Date.now() + 7 * 3600 * 1000);
+                    return {
+                        from_ts: toVnStartMs(vnNow.getUTCFullYear(), vnNow.getUTCMonth(), vnNow.getUTCDate(), hStart),
+                        to_ts:   toVnEndMs(vnNow.getUTCFullYear(), vnNow.getUTCMonth(), vnNow.getUTCDate(), hEnd)
+                    };
                 }
                 return { from_ts: null, to_ts: null };
             }
@@ -1092,16 +1103,18 @@
                 const startObj = parseDate(parts[0]);
                 const endObj = parseDate(parts[1]) || startObj;
                 if (startObj && endObj) {
-                    const dStart = new Date(startObj.year, startObj.month, startObj.day, hStart, 0, 0, 0);
-                    const dEnd = new Date(endObj.year, endObj.month, endObj.day, hEnd, 59, 59, 999);
-                    return { from_ts: dStart.getTime(), to_ts: dEnd.getTime() };
+                    return {
+                        from_ts: toVnStartMs(startObj.year, startObj.month, startObj.day, hStart),
+                        to_ts:   toVnEndMs(endObj.year, endObj.month, endObj.day, hEnd)
+                    };
                 }
             } else if (parts.length === 1) {
                 const dateObj = parseDate(parts[0]);
                 if (dateObj) {
-                    const dStart = new Date(dateObj.year, dateObj.month, dateObj.day, hStart, 0, 0, 0);
-                    const dEnd = new Date(dateObj.year, dateObj.month, dateObj.day, hEnd, 59, 59, 999);
-                    return { from_ts: dStart.getTime(), to_ts: dEnd.getTime() };
+                    return {
+                        from_ts: toVnStartMs(dateObj.year, dateObj.month, dateObj.day, hStart),
+                        to_ts:   toVnEndMs(dateObj.year, dateObj.month, dateObj.day, hEnd)
+                    };
                 }
             }
 
@@ -1521,11 +1534,19 @@
         // =====================================================================
         // 9. NÚT THỬ NGHIỆM (+50 MẪU) GỌI API BACKEND
         // =====================================================================
+        function getAdminHeaders() {
+            const headers = { 'Content-Type': 'application/json' };
+            if (appSettings.adminToken && appSettings.adminToken.trim() !== '') {
+                headers['X-Admin-Token'] = appSettings.adminToken.trim();
+            }
+            return headers;
+        }
+
         async function generateSampleData() {
             try {
                 const res = await fetch(`${API_BASE_URL}/api/simulate`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getAdminHeaders(),
                     body: JSON.stringify({ count: 50 })
                 });
                 const data = await res.json();
@@ -1585,7 +1606,7 @@
                         try {
                             const res = await fetch(`${API_BASE_URL}/api/import/indexeddb`, {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: getAdminHeaders(),
                                 body: JSON.stringify({ records: records })
                             });
                             const data = await res.json();
@@ -1636,15 +1657,30 @@
             try {
                 const res = await fetch(`${API_BASE_URL}/api/database/clear`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getAdminHeaders(),
                     body: JSON.stringify({ confirm: 'XOA' })
                 });
                 const data = await res.json();
                 if (data.success) {
                     closeClearDatabaseModal();
-                    // Tự động tải về file backup SQLite
+                    // Tự động tải về file backup SQLite qua Blob
                     if (data.backup_download_url) {
-                        window.location.href = `${API_BASE_URL}${data.backup_download_url}`;
+                        try {
+                            const bRes = await fetch(`${API_BASE_URL}${data.backup_download_url}`);
+                            if (bRes.ok) {
+                                const blob = await bRes.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = data.backup_filename || 'rainfall_data_backup.db';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(url);
+                            }
+                        } catch (dlErr) {
+                            console.warn('Backup download warning:', dlErr);
+                        }
                     }
                     alert(`Đã tạo bản sao lưu (${data.backup_filename}) và xóa sạch CSDL Backend thành công!`);
                     addLog(`[CSDL] Đã xóa CSDL SQLite sau khi tạo bản sao lưu ${data.backup_filename}`);
@@ -1668,6 +1704,8 @@
             document.getElementById('setting-volt-max').value = appSettings.voltMax;
             document.getElementById('setting-timeout-min').value = appSettings.timeoutMinutes;
             document.getElementById('setting-backend-url').value = appSettings.backendUrl || '';
+            const tokenEl = document.getElementById('setting-admin-token');
+            if (tokenEl) tokenEl.value = appSettings.adminToken || '';
             checkIndexedDBCount();
             document.getElementById('settings-modal').classList.remove('hidden');
         }
@@ -1677,14 +1715,16 @@
         }
 
         function saveSettingsFromModal() {
+            const tokenEl = document.getElementById('setting-admin-token');
             const newSettings = {
                 thresholdWarn: parseFloat(document.getElementById('setting-warn').value) || 80.0,
                 thresholdDanger: parseFloat(document.getElementById('setting-danger').value) || 200.0,
                 hysteresis: parseFloat(document.getElementById('setting-hysteresis').value) || 5.0,
                 voltMin: parseFloat(document.getElementById('setting-volt-min').value) || 0.08,
                 voltMax: parseFloat(document.getElementById('setting-volt-max').value) || 3.35,
-                timeoutMinutes: parseInt(document.getElementById('setting-timeout-min').value) || 10,
-                backendUrl: document.getElementById('setting-backend-url').value.trim()
+                timeoutMinutes: parseInt(document.getElementById('setting-timeout-min').value) || 2,
+                backendUrl: document.getElementById('setting-backend-url').value.trim(),
+                adminToken: tokenEl ? tokenEl.value.trim() : ''
             };
             saveSettings(newSettings);
             API_BASE_URL = getApiBaseUrl();
