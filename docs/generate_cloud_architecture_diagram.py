@@ -120,15 +120,15 @@ def draw_cloud_architecture_diagram(output_path):
         accent="#334155"
     )
 
-    # 4. Render Cloud Backend (Gunicorn + Flask + SQLite WAL + UptimeRobot)
+    # 4. Render Cloud Backend (Gunicorn + Flask + Supabase PostgreSQL / SQLite WAL)
     draw_node(
         ax, 0.04, 0.08, 0.41, 0.32,
-        "RENDER CLOUD BACKEND (SERVICE V3.0)", "esp32-iot-gateway.onrender.com (UptimeRobot 5p)",
+        "RENDER CLOUD + SUPABASE POSTGRESQL", "Gunicorn (Py 3.11) • UptimeRobot 5p • Dual-Mode DB",
         [
             "MQTT Worker: Dedup (<1s), Validate, Backoff 1–60s",
-            "Gunicorn (1 worker) + SQLite WAL (UTC ms → UTC+7)",
-            "REST API + Admin Token: /status, /measurements, /series",
-            "Export: Excel 3-Sheet (.xlsx), CSV BOM, SQLite (.db)"
+            "CSDL chính: Supabase PostgreSQL (Session Pooler SSL)",
+            "Dự phòng cục bộ: SQLite WAL • Bảo vệ X-Admin-Token",
+            "Export: Excel 3-Sheet (.xlsx), CSV BOM, Snapshot .db"
         ]
     )
 

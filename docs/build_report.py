@@ -335,10 +335,10 @@ def create_report():
             "thích nghi Adaptive EMA (α = 0,80 khi biến động lớn; α = 0,15 khi ổn định) cùng dải chống rung 0,2 cm, và truyền bản tin JSON mỗi 5 giây "
             "qua UART1. Ở tầng cầu nối, ESP32-C3 đảm nhận vai trò IoT Gateway với bộ tách khung UART lọc nhiễu 2 chế độ, tự kết nối lại Wi-Fi vô hạn, "
             "xuất bản MQTT v3.1.1 (QoS 1) lên HiveMQ Broker kèm Heartbeat 15 giây và Last Will and Testament (LWT). Ở tầng đám mây và giao diện, dịch vụ "
-            "Backend v3.0 (Gunicorn/Flask + MQTT Worker + SQLite WAL) được triển khai trên Render kèm UptimeRobot duy trì hoạt động mỗi 5 phút, kết hợp "
-            "Web Dashboard trên GitHub Pages hỗ trợ cảnh báo có trễ Hysteresis, lọc lịch sử cố định khung giờ (UTC+7) và tải báo cáo qua luồng Blob. "
-            "Kết quả đo đối soát trên 11 mốc trong dải 0–65 cm đạt sai số từ −0,4 cm đến +0,3 cm (MAE = 0,22 cm, RMSE = 0,24 cm, y = 0,9979x + 0,13 cm, "
-            "R² = 0,99989), đáp ứng ngưỡng ±1,0 cm theo khuyến nghị WMO-No. 168."
+            "Backend v3.0 (Gunicorn/Flask + MQTT Worker) chạy kiến trúc CSDL hai chế độ (Dual-Mode) lưu trữ bền vững trên Supabase PostgreSQL (dự phòng "
+            "SQLite WAL khi chạy cục bộ), triển khai trên Render kèm UptimeRobot duy trì mỗi 5 phút, kết hợp Web Dashboard trên GitHub Pages hỗ trợ cảnh "
+            "báo Hysteresis, lọc lịch sử cố định khung giờ (UTC+7) và tải báo cáo qua Blob. Kết quả đo đối soát trên 11 mốc trong dải 0–65 cm đạt sai số "
+            "từ −0,4 cm đến +0,3 cm (MAE = 0,22 cm, RMSE = 0,24 cm, y = 0,9979x + 0,13 cm, R² = 0,99989), đáp ứng ngưỡng ±1,0 cm theo WMO-No. 168."
         ),
         size=13, italic=True
     )
@@ -352,7 +352,7 @@ def create_report():
     style_run(
         p_kw.add_run(
             "IoT thủy văn, giám sát mực nước, cảm biến áp suất thủy tĩnh, STM32F103C8T6, ESP32-C3, "
-            "Adaptive EMA, MQTT LWT, SQLite WAL, Render Cloud, Web Dashboard, Hysteresis."
+            "Adaptive EMA, MQTT LWT, Supabase PostgreSQL, SQLite WAL, Render Cloud, Web Dashboard, Hysteresis."
         ),
         size=13, italic=True
     )
@@ -399,10 +399,10 @@ def create_report():
         "và cơ chế Heartbeat 15 giây kết hợp Last Will and Testament (LWT) [7]."
     )
     add_bullet(
-        "Tầng Backend đám mây và cơ sở dữ liệu SQLite WAL",
-        "Xây dựng dịch vụ Backend v3.0 (Python, Flask/Gunicorn, MQTT Worker, SQLite WAL) triển khai trên Render Cloud kết hợp UptimeRobot duy trì "
-        "kết nối mỗi 5 phút; bảo vệ các API quản trị bằng mã xác thực (Admin Token), chống lỗi đọc tệp tùy ý, hỗ trợ Downsampling, phát hiện đứt quãng "
-        "(Gap Detection) và xuất báo cáo đa định dạng (Excel 3 sheet, CSV UTF-8 BOM, SQLite)."
+        "Tầng Backend đám mây và CSDL Dual-Mode (Supabase PostgreSQL / SQLite WAL)",
+        "Xây dựng dịch vụ Backend v3.0 (Python 3.11, Flask/Gunicorn, MQTT Worker) hỗ trợ tự động chuyển đổi giữa Supabase PostgreSQL (lưu trữ đám mây "
+        "bền vững tách rời khỏi container ứng dụng) và SQLite WAL (khi chạy cục bộ), triển khai trên Render kết hợp UptimeRobot duy trì mỗi 5 phút; "
+        "bảo vệ API quản trị bằng mã xác thực (X-Admin-Token), chống đọc tệp tùy ý, hỗ trợ Downsampling, Gap Detection và xuất báo cáo đa định dạng."
     )
     add_bullet(
         "Tầng Web Dashboard đa thiết bị",
@@ -501,7 +501,7 @@ def create_report():
             ["Subramaniam và cs. [5] (2010)", "Cảm biến mực nước tại chỗ", "Hệ thống nhúng / Mạng không dây từ xa", "Cảnh báo lũ sớm theo ngưỡng cố định cho khu vực xa trung tâm."],
             ["Kang và cs. [3] (2021)", "Siêu âm nhắm 2 mục tiêu", "2 vi điều khiển + nguồn mặt trời + Cloud", "Tối ưu năng lượng, giám sát đồng thời mực suối và ngập mặt đường."],
             ["Panagopoulos và cs. [4] (2021)", "Siêu âm lắp trên kênh đô thị", "Trạm tự động + truyền dữ liệu từ xa", "Đánh giá sai số thực địa dài hạn trong dòng chảy đô thị biến động."],
-            ["Hệ thống đề xuất (Đề tài này)", "Áp suất thủy tĩnh 0–5 m (0–3,3 V)", "STM32F103 + ESP32-C3 (UART, Wi-Fi, MQTT LWT)", "Lọc Adaptive EMA, SQLite WAL (Render + UptimeRobot), Hysteresis, xuất Excel/CSV/.db."]
+            ["Hệ thống đề xuất (Đề tài này)", "Áp suất thủy tĩnh 0–5 m (0–3,3 V)", "STM32F103 + ESP32-C3 (UART, Wi-Fi, MQTT LWT)", "Lọc Adaptive EMA, Supabase PostgreSQL / SQLite WAL (Render + UptimeRobot), Hysteresis, xuất Excel/CSV/.db."]
         ],
         col_widths_cm=[3.6, 3.2, 4.1, 5.3],
         center_cols=[],
@@ -533,9 +533,10 @@ def create_report():
     )
 
     add_body(
-        "Về lưu trữ dữ liệu chuỗi thời gian, việc sử dụng SQLite ở chế độ Write-Ahead Logging (WAL) cho phép tiến trình đọc HTTP API và tiến trình ghi "
-        "MQTT hoạt động đồng thời mà không khóa lẫn nhau [10], đồng thời cấu trúc lưu trữ gọn nhẹ trong một tập tin duy nhất giúp dễ sao lưu và xuất "
-        "trực tiếp phục vụ phân tích ngoại tuyến."
+        "Về lưu trữ dữ liệu chuỗi thời gian, việc kết hợp kiến trúc hai chế độ (Dual-Mode) giữa PostgreSQL đám mây (Supabase) khi triển khai trực tuyến "
+        "và SQLite chế độ Write-Ahead Logging (WAL) [10] khi vận hành ngoại tuyến cục bộ giúp giải quyết đồng thời hai yêu cầu: dữ liệu trên Cloud không "
+        "bị mất khi container ứng dụng khởi động lại hoặc redeploy, trong khi môi trường cục bộ vẫn gọn nhẹ, đọc/ghi đồng thời không khóa nghẽn và dễ "
+        "dàng xuất toàn bộ dữ liệu ra một tập tin SQLite (.db) duy nhất phục vụ phân tích ngoại tuyến."
     )
 
     # =========================================================================
@@ -748,23 +749,30 @@ def create_report():
         "app_config.example.h để tránh lộ mật khẩu mạng trên kho lưu trữ GitHub công khai."
     )
 
-    add_h2("3.4. Thiết kế Backend Service v3.0, CSDL SQLite WAL và triển khai Cloud")
+    add_h2("3.4. Thiết kế Backend Service v3.0, CSDL Dual-Mode (Supabase PostgreSQL / SQLite WAL) và triển khai Cloud")
     add_body(
         "Dịch vụ Backend v3.0 (wifiesp32/data_logger/service.py) tích hợp ba thành phần trong cùng tiến trình: MQTT Background Worker lắng nghe "
-        "broker.hivemq.com:1883, trình quản lý SQLite chế độ WAL (rainfall_data.db) và máy chủ REST API viết bằng Flask chạy dưới WSGI server "
-        "Gunicorn (cấu hình 1 worker, 4 luồng: gunicorn --workers 1 --threads 4 để tránh sinh nhiều MQTT client ghi trùng bản ghi). Tại luồng MQTT nền, "
-        "mỗi gói tin được lọc trùng trong cửa sổ < 1,0 giây (Deduplication), kiểm duyệt đủ 5 trường JSON không chứa NaN/Inf và raw ADC thuộc [0, 4095], "
-        "và kết nối lại theo Exponential Backoff (1 s → 60 s). CSDL SQLite bật PRAGMA journal_mode = WAL [10], đánh chỉ mục idx_received_at và "
-        "idx_simulated, lưu mốc thời gian UTC epoch (ms), quy đổi UTC+7 khi hiển thị và phân tách dữ liệu thật (is_simulated = 0) với dữ liệu thử "
-        "nghiệm (is_simulated = 1)."
+        "broker.hivemq.com:1883, lớp quản lý cơ sở dữ liệu hai chế độ (DualDBConnection) và máy chủ REST API viết bằng Flask chạy dưới WSGI server "
+        "Gunicorn trên nền Python 3.11.11 (cấu hình gunicorn --workers 1 --threads 4 để đảm bảo chỉ có đúng một MQTT Worker ghi dữ liệu, kèm ép nạp "
+        "sẵn bảng mã encodings.idna trên luồng chính để tránh xung đột đa luồng trong gthread)."
     )
     add_body(
-        "Về bảo mật API trên môi trường công khai, các endpoint có khả năng thay đổi hoặc xóa dữ liệu (/api/database/clear, /api/simulate, "
-        "/api/import/indexeddb) được bảo vệ bởi cơ chế xác thực mã quản trị qua header X-Admin-Token (đối chiếu hằng thời gian bằng hmac.compare_digest "
-        "với biến môi trường ADMIN_API_KEY, tự động khóa mặc định theo nguyên tắc fail-closed trên Render nếu chưa thiết lập khóa). Endpoint tải bản "
-        "sao lưu /api/backup/download/<filename> áp dụng kiểm tra os.path.basename kết hợp biểu thức chính quy chặt "
-        "^rainfall_data_backup_\\d{8}_\\d{6}\\.db$ nhằm ngăn chặn hoàn toàn lỗ hổng đọc tệp tùy ý (Path Traversal). Bảng 10 tổng hợp hệ thống 11 "
-        "REST API của Backend v3.0."
+        "Khi biến môi trường DATABASE_URL được cấu hình trên Render, lớp DualDBConnection tự động kết nối tới cơ sở dữ liệu đám mây Supabase PostgreSQL "
+        "thông qua Shared/Session Pooler (cổng 5432, tương thích IPv4 với Render, bắt buộc mã hóa SSL sslmode=require) bằng thư viện psycopg2-binary, "
+        "tự động ánh xạ tham số truy vấn '?' sang '%s', sử dụng kiểu BIGINT cho mốc thời gian Unix epoch mili-giây (received_at) và khởi tạo sẵn bảng "
+        "measurements cùng hai chỉ mục idx_received_at và idx_simulated. Nhờ tách hoàn toàn dữ liệu sang Supabase, hệ thống khắc phục dứt điểm hạn chế "
+        "ổ đĩa tạm thời (ephemeral disk) của gói Render Free: dữ liệu không bao giờ bị mất khi cập nhật mã nguồn hay khởi động lại container. Ngược lại, "
+        "khi chạy cục bộ không có DATABASE_URL, dịch vụ tự động chuyển sang SQLite WAL (rainfall_data.db) [10]. Ngoài ra, tiện ích migrate_to_supabase.py "
+        "được cung cấp sẵn để di trú hàng loạt dữ liệu thật từ SQLite lên Supabase theo từng lô 1.000 bản ghi có lọc trùng."
+    )
+    add_body(
+        "Tại luồng MQTT nền, mỗi gói tin được lọc trùng trong < 1,0 giây (Deduplication), kiểm duyệt đủ 5 trường JSON không chứa NaN/Inf và raw ADC "
+        "thuộc [0, 4095], kết hợp tự kết nối lại theo Exponential Backoff (1 s → 60 s). Về bảo mật API trên môi trường công khai, các endpoint ghi/xóa "
+        "(/api/database/clear, /api/simulate, /api/import/indexeddb) yêu cầu xác thực mã quản trị qua header X-Admin-Token (đối chiếu hằng thời gian "
+        "bằng hmac.compare_digest với ADMIN_API_KEY, tự khóa fail-closed trên Render nếu chưa đặt khóa). Endpoint /api/backup/download/<filename> kiểm "
+        "tra os.path.basename kết hợp regex ^rainfall_data_backup_\\d{8}_\\d{6}\\.db$ chống Path Traversal. Khi chạy trên Supabase, nút tải tệp CSDL "
+        "(/api/database/download) và cơ chế tự sao lưu trước khi xóa sẽ tự động xuất nhanh một bản chụp SQLite (.db) từ PostgreSQL trả về cho người dùng. "
+        "Bảng 10 tổng hợp hệ thống 11 REST API của Backend v3.0."
     )
 
     add_academic_table(
@@ -772,15 +780,15 @@ def create_report():
         caption_text="Danh sách các REST API và cơ chế xử lý dữ liệu của Backend Service v3.0",
         headers=["Endpoint REST API", "Phương thức", "Chức năng & Cơ chế bảo mật / xử lý"],
         rows=[
-            ["/api/status", "GET", "Trả trạng thái Online / Mất dữ liệu (timeout mặc định 2 phút), tổng mẫu CSDL và mẫu thật mới nhất; đồng thời là endpoint cho UptimeRobot ping mỗi 5 phút."],
+            ["/api/status", "GET / HEAD", "Trả trạng thái Online / Mất dữ liệu (timeout 2 phút), loại CSDL (db_engine: PostgreSQL Supabase hoặc SQLite WAL), tổng mẫu; đồng thời là endpoint cho UptimeRobot ping mỗi 5 phút."],
             ["/api/measurements", "GET", "Truy vấn phân trang (limit/offset), sắp xếp tăng/giảm, lọc thời gian & nguồn dữ liệu, tự tính tốc độ thay đổi mực nước (cm/h)."],
             ["/api/stats", "GET", "Thống kê tổng mẫu, trung bình, Max và Min kèm mốc giờ UTC+7; tự động loại trừ mẫu lỗi cảm biến ngoài dải [0,08 V; 3,35 V]."],
             ["/api/series", "GET", "Cung cấp chuỗi vẽ biểu đồ lịch sử: tự động Downsampling (~800 điểm khi > 1.500 mẫu) và Gap Detection chèn null khi đứt quãng > max(10 s, 2·T_avg)."],
             ["/api/export.xlsx", "GET", "Xuất báo cáo Excel 3 Sheet: Du_Lieu_Chi_Tiet, Tong_Hop_Theo_Gio (kèm tốc độ dâng/rút Max) và Tong_Hop_Theo_Ngay."],
             ["/api/export.csv", "GET", "Xuất tệp CSV gắn UTF-8 BOM (utf-8-sig) hiển thị đúng tiếng Việt trên Microsoft Excel."],
-            ["/api/database/download", "GET", "Tải trực tiếp tập tin cơ sở dữ liệu SQLite (rainfall_data.db)."],
+            ["/api/database/download", "GET", "Tải tệp CSDL SQLite (rainfall_data.db); tự động xuất bản chụp SQLite snapshot từ Supabase khi đang chạy PostgreSQL."],
             ["/api/simulate\n/api/import/indexeddb", "POST\n(Admin)", "Yêu cầu X-Admin-Token: sinh 50 mẫu thử nghiệm (is_simulated = 1) hoặc nhập dữ liệu cũ từ IndexedDB."],
-            ["/api/database/clear\n/api/backup/download/<f>", "POST / GET\n(Admin)", "Yêu cầu X-Admin-Token và mã xác nhận 'XOA'; tự sao lưu tệp .db trước khi xóa; endpoint tải backup lọc regex chống Path Traversal."]
+            ["/api/database/clear\n/api/backup/download/<f>", "POST / GET\n(Admin)", "Yêu cầu X-Admin-Token và mã xác nhận 'XOA'; tự xuất bản sao lưu .db trước khi xóa; endpoint tải backup lọc regex chống Path Traversal."]
         ],
         col_widths_cm=[4.2, 2.0, 10.0],
         center_cols=[1],
@@ -788,11 +796,10 @@ def create_report():
     )
 
     add_body(
-        "Dịch vụ Backend được triển khai đám mây trên Render (tệp render.yaml tại Phụ lục C) tại địa chỉ https://esp32-iot-gateway.onrender.com và "
-        "được gắn dịch vụ giám sát UptimeRobot gửi yêu cầu HTTP định kỳ mỗi 5 phút tới /api/status nhằm giữ tiến trình luôn thức (tránh cơ chế tự ngủ "
-        "sau 15 phút không có truy cập của gói Render Free). Giao diện Web Dashboard được phát hành trên GitHub Pages tại "
-        "https://v2tacodin.github.io/ESP32-IoT-Gateway/, tự động nhận diện máy chủ Render Cloud cho mọi thiết bị từ xa hoặc tự chuyển sang địa chỉ nội "
-        "bộ khi chạy cục bộ trên cổng 5000."
+        "Dịch vụ Backend được triển khai trên Render (render.yaml tại Phụ lục C) tại địa chỉ https://esp32-iot-gateway.onrender.com, kết nối trực tiếp "
+        "tới Supabase PostgreSQL và được UptimeRobot gửi yêu cầu HTTP HEAD/GET định kỳ mỗi 5 phút tới /api/status để duy trì tiến trình luôn hoạt động. "
+        "Web Dashboard được phát hành công khai trên GitHub Pages tại https://v2tacodin.github.io/ESP32-IoT-Gateway/, tự động kết nối máy chủ Render "
+        "Cloud cho mọi thiết bị từ xa hoặc tự chuyển sang địa chỉ nội bộ khi chạy cục bộ trên cổng 5000."
     )
 
     add_h2("3.5. Thiết kế Web Dashboard và thuật toán cảnh báo Hysteresis")
@@ -907,10 +914,10 @@ def create_report():
 
     add_h2("4.3. Kết quả kiểm thử vận hành toàn hệ thống trên nền tảng đám mây")
     add_body(
-        "Toàn bộ chuỗi truyền tin từ ESP32-C3, HiveMQ Broker, Render Cloud Backend (Gunicorn + SQLite WAL + UptimeRobot ping mỗi 5 phút) đến Web "
-        "Dashboard GitHub Pages đã được kiểm thử theo 7 kịch bản vận hành thực tế. Trong cơ sở dữ liệu rainfall_data.db, nhóm tách biệt minh bạch giữa "
-        "16.220 mẫu thu thập thật từ cảm biến trong ngày 23/11/2026 (is_simulated = 0) và 864 mẫu giả lập bổ sung cho 3 ngày 20–22/11/2026 (288 mẫu/ngày, "
-        "đánh dấu is_simulated = 1) dùng riêng để kiểm thử giao diện lọc lịch sử đa ngày và tính năng khóa khung giờ. Bảng 14 tổng hợp kết quả kiểm thử."
+        "Toàn bộ chuỗi truyền tin từ ESP32-C3, HiveMQ Broker, Render Cloud Backend (Gunicorn + Supabase PostgreSQL + UptimeRobot ping mỗi 5 phút) "
+        "đến Web Dashboard GitHub Pages đã được kiểm thử thực tế trên môi trường sản xuất. Đối với kho dữ liệu kiểm thử cục bộ (rainfall_data.db), "
+        "nhóm tách biệt minh bạch giữa 16.220 mẫu thu thập thật từ cảm biến ngày 23/11/2026 (is_simulated = 0) và 864 mẫu giả lập bổ sung cho 3 ngày "
+        "20–22/11/2026 (288 mẫu/ngày, is_simulated = 1) dùng riêng để kiểm thử giao diện lọc đa ngày. Bảng 14 tổng hợp kết quả kiểm thử toàn hệ thống."
     )
 
     add_academic_table(
@@ -920,11 +927,11 @@ def create_report():
         rows=[
             ["Tự phục hồi Wi-Fi", "Tắt Hotspot / mang điện thoại ra ngoài vùng phủ sóng rồi quay lại.", "ESP32-C3 tự thử kết nối lại liên tục, tự khôi phục Wi-Fi và MQTT ngay khi có sóng mà không cần reset.", "Đạt"],
             ["Phát hiện mất nguồn (LWT & Watchdog)", "Rút nguồn ESP32-C3 đột ngột khi Dashboard đang mở.", "Broker phát LWT offline sau ~22,5 s (1,5×keepalive = 15 s [7]); Watchdog 40 s của Dashboard dự phòng khi rớt tin.", "Đạt"],
-            ["Duy trì Backend đám mây (UptimeRobot)", "Bật UptimeRobot ping /api/status mỗi 5 phút; tắt máy tính cá nhân.", "Render duy trì hoạt động liên tục không bị ngủ sau 15 phút; ghi nhận 16.220 mẫu thật ngày 23/11/2026.", "Đạt"],
+            ["Backend Render + Supabase PostgreSQL", "Kiểm thử GET/HEAD /api/status và redeploy Render khi gắn DATABASE_URL (Session Pooler) + UptimeRobot 5p.", "HTTP 200 OK; db_engine = 'PostgreSQL (Supabase)'; HEAD /api/status = 200 OK; dữ liệu không bị xóa khi Render redeploy.", "Đạt"],
             ["Truy cập đa thiết bị", "Mở link GitHub Pages trên máy tính khác và điện thoại.", "Tự động kết nối API Render, hiển thị Live WSS và lịch sử CSDL không cần cấu hình IP cục bộ.", "Đạt"],
             ["Bền vững F5 & Đồng bộ 30 điểm", "Tải lại trang (F5) hoặc chuyển sang thẻ trình duyệt khác rồi quay lại.", "Khôi phục thẻ Live từ localStorage và đồng bộ lại đúng 30 bản ghi mới nhất từ /api/measurements.", "Đạt"],
             ["Lọc lịch sử UTC+7 & Khóa khung giờ", "Chọn nguồn Giả lập/Tất cả, chọn khung giờ 08:00–11:59 và chuyển các ngày 20–23/11.", "Hiển thị chính xác 288 mẫu/ngày (is_simulated = 1) và 16.220 mẫu thật ngày 23/11; khung giờ được giữ cố định.", "Đạt"],
-            ["Bảo mật API & Xuất báo cáo Blob", "Kiểm thử gọi /api/database/clear không có Token, Path Traversal, và tải Excel/CSV/.db.", "Từ chối truy cập trái phép (HTTP 403/400); tải thành công Excel 3 Sheet (~611 KB), CSV BOM (~1,51 MB) và .db (~1,72 MB).", "Đạt"]
+            ["Bảo mật API & Xuất Snapshot/Báo cáo", "Kiểm thử Path Traversal, gọi /api/database/clear không có Token, và tải Excel/CSV/Snapshot .db từ Supabase.", "Chặn Path Traversal (HTTP 400) và Clear DB không Token (HTTP 403); tải thành công .xlsx, .csv và bản chụp SQLite hợp lệ.", "Đạt"]
         ],
         col_widths_cm=[3.3, 4.4, 6.8, 1.7],
         center_cols=[3],
@@ -933,13 +940,9 @@ def create_report():
 
     add_h2("4.4. Thảo luận, hạn chế hiện tại và hướng mở rộng mạng diện rộng LoRaWAN")
     add_body(
-        "Bên cạnh các kết quả đạt được, hệ thống hiện tại vẫn tồn tại năm hạn chế cần lưu ý và tiếp tục khắc phục ở giai đoạn triển khai thực tế:"
-    )
-    add_bullet(
-        "Ổ đĩa tạm thời (Ephemeral Disk) trên gói Render Free",
-        "Dù UptimeRobot giúp giữ tiến trình Backend hoạt động liên tục không bị ngủ sau 15 phút, ổ đĩa của container Render gói miễn phí vẫn là ổ đĩa "
-        "tạm: mỗi khi redeploy hoặc máy chủ khởi động lại định kỳ, tệp SQLite cục bộ sẽ quay về bản lưu trong kho mã nguồn. Giải pháp lâu dài là tách "
-        "CSDL sang dịch vụ PostgreSQL độc lập (như Neon hoặc Supabase) thay cho SQLite cục bộ."
+        "Nhờ kết hợp Render Cloud (kèm UptimeRobot ping mỗi 5 phút) với cơ sở dữ liệu tách rời Supabase PostgreSQL (500 MB miễn phí), hai giới hạn lớn "
+        "nhất của gói triển khai miễn phí là trạng thái tự ngủ sau 15 phút và ổ đĩa tạm thời (ephemeral disk) đã được khắc phục. Tuy nhiên, hệ thống "
+        "vẫn còn bốn hạn chế kỹ thuật cần tiếp tục cải tiến khi đưa vào vận hành thực tế quy mô lớn:"
     )
     add_bullet(
         "Xác thực tầng MQTT Broker",
@@ -985,14 +988,15 @@ def create_report():
         "MQTT LWT (~22,5 giây) kết hợp Watchdog 40 giây, và tách thông tin Wi-Fi khỏi kho mã nguồn công khai."
     )
     add_bullet(
-        "Về hạ tầng Backend Cloud và Web Dashboard",
-        "Triển khai Backend v3.0 (Gunicorn + Flask + MQTT Worker + SQLite WAL) trên Render kết hợp UptimeRobot duy trì hoạt động mỗi 5 phút, bổ sung "
-        "bảo vệ API quản trị bằng X-Admin-Token và lọc Path Traversal; đồng thời phát hành Web Dashboard trên GitHub Pages hỗ trợ cảnh báo Hysteresis, "
-        "Fail-Safe (timeout 2 phút), đồng bộ F5, lọc lịch sử chuẩn UTC+7 có khóa khung giờ và tải báo cáo đa định dạng (Excel 3 sheet, CSV BOM, SQLite)."
+        "Về hạ tầng Backend Cloud, Supabase PostgreSQL và Web Dashboard",
+        "Triển khai thành công Backend v3.0 (Gunicorn + Flask + MQTT Worker) với kiến trúc CSDL hai chế độ Supabase PostgreSQL (đám mây bền vững qua "
+        "Session Pooler SSL) và SQLite WAL (cục bộ), chạy trên Render kết hợp UptimeRobot duy trì mỗi 5 phút, bảo vệ API quản trị bằng X-Admin-Token "
+        "và lọc Path Traversal; đồng thời phát hành Web Dashboard trên GitHub Pages hỗ trợ cảnh báo Hysteresis, Fail-Safe (2 phút), đồng bộ F5, lọc "
+        "lịch sử chuẩn UTC+7 có khóa khung giờ và tải báo cáo đa định dạng (Excel 3 sheet, CSV BOM, snapshot SQLite)."
     )
     add_body(
-        "Hệ thống có cấu trúc mô-đun rõ ràng, chi phí hợp lý và minh bạch về các giới hạn vận hành hiện tại, tạo nền tảng thuận lợi để nâng cấp lên "
-        "cơ sở dữ liệu đám mây tách rời (PostgreSQL), Broker có xác thực TLS và mạng diện rộng LoRaWAN trong các giai đoạn phát triển tiếp theo."
+        "Hệ thống có cấu trúc mô-đun rõ ràng, chi phí hợp lý và lưu trữ bền vững trên nền tảng đám mây, tạo nền tảng thuận lợi để nâng cấp thêm xác "
+        "thực TLS cho MQTT Broker, bộ đệm store-and-forward trên nút biên và mạng diện rộng LoRaWAN trong các giai đoạn phát triển tiếp theo."
     )
 
     # =========================================================================
@@ -1113,23 +1117,23 @@ def create_report():
         title="Trích đoạn mã nguồn ESP32-C3 Gateway (ESP-IDF FreeRTOS)"
     )
 
-    add_h2("Phụ lục C. Lược đồ CSDL SQLite v3.0 và cấu hình triển khai Gunicorn trên Render")
+    add_h2("Phụ lục C. Lược đồ CSDL Supabase PostgreSQL / SQLite v3.0 và cấu hình triển khai Render")
     add_code_block(
-        "PRAGMA journal_mode = WAL;\n"
+        "-- Luoc do bang measurements tren Supabase PostgreSQL (Dual-Mode voi SQLite WAL)\n"
         "CREATE TABLE IF NOT EXISTS measurements (\n"
-        "    id           INTEGER PRIMARY KEY AUTOINCREMENT,\n"
-        "    received_at  INTEGER NOT NULL,        -- Unix epoch UTC (ms)\n"
-        "    level_cm     REAL    NOT NULL,        -- Muc nuoc (cm)\n"
-        "    volt         REAL    NOT NULL,        -- Dien ap cam bien (V)\n"
-        "    percent      REAL    NOT NULL,        -- Ty le cot nuoc (%)\n"
-        "    press_bar    REAL    NOT NULL,        -- Ap suat thuy tinh (Bar)\n"
-        "    raw_adc      INTEGER NOT NULL,        -- Gia tri ADC 12-bit [0..4095]\n"
-        "    is_simulated INTEGER DEFAULT 0,       -- 0: That, 1: Gia lap\n"
-        "    created_at   TEXT    DEFAULT CURRENT_TIMESTAMP\n"
+        "    id           BIGSERIAL PRIMARY KEY,\n"
+        "    received_at  BIGINT           NOT NULL,  -- Unix epoch UTC (ms)\n"
+        "    level_cm     DOUBLE PRECISION NOT NULL,  -- Muc nuoc (cm)\n"
+        "    volt         DOUBLE PRECISION NOT NULL,  -- Dien ap cam bien (V)\n"
+        "    percent      DOUBLE PRECISION NOT NULL,  -- Ty le cot nuoc (%)\n"
+        "    press_bar    DOUBLE PRECISION NOT NULL,  -- Ap suat thuy tinh (Bar)\n"
+        "    raw_adc      INTEGER          NOT NULL,  -- Gia tri ADC 12-bit [0..4095]\n"
+        "    is_simulated INTEGER DEFAULT 0,          -- 0: That, 1: Gia lap\n"
+        "    created_at   TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP\n"
         ");\n"
         "CREATE INDEX IF NOT EXISTS idx_received_at ON measurements(received_at);\n"
         "CREATE INDEX IF NOT EXISTS idx_simulated   ON measurements(is_simulated);\n\n"
-        "# Tep render.yaml (Gunicorn 1 worker + 4 threads, tranh ghi trung MQTT)\n"
+        "# Tep render.yaml (Python 3.11 + Gunicorn 1 worker + Supabase DATABASE_URL)\n"
         "services:\n"
         "  - type: web\n"
         "    name: esp32-water-monitor\n"
@@ -1137,7 +1141,7 @@ def create_report():
         "    rootDir: wifiesp32/data_logger\n"
         "    buildCommand: pip install -r requirements.txt\n"
         "    startCommand: gunicorn --workers 1 --threads 4 --bind 0.0.0.0:$PORT service:app",
-        title="Lược đồ SQLite v3.0 và tệp cấu hình render.yaml"
+        title="Lược đồ Supabase PostgreSQL v3.0 và tệp cấu hình render.yaml"
     )
 
     path1 = r"D:\Embedded\Bao_Cao_Tong_Hop_IoT_Cam_Bien_Va_Mang.docx"
