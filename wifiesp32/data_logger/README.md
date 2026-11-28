@@ -1,58 +1,72 @@
-# HƯỚNG DẪN LƯU TRỮ VÀ TRÍCH XUẤT DỮ LIỆU LƯỢNG MƯA & MỰC NƯỚC RA EXCEL
+# Backend Service & Data Logger v3.0 (Python Flask + MQTT + Supabase / SQLite)
 
-Thư mục này cung cấp hệ thống hoàn chỉnh giúp lưu trữ, lọc và trích xuất dữ liệu đo được từ **STM32 & ESP32-C3** vào **Excel (.xlsx)** làm cơ sở dữ liệu nghiên cứu khoa học.
-
----
-
-## 1. Cấu Trúc File Excel Chuẩn Nghiên Cứu
-
-Khi xuất ra file `Bao_Cao_Luong_Mua_Nghien_Cuu.xlsx`, dữ liệu sẽ được phân tách thành 4 Sheet độc lập:
-
-1. **Sheet 1: `Du_Lieu_Chi_Tiet` (Raw Data)**:
-   - Lưu trữ toàn bộ các mốc thời gian đo: `STT`, `Thời Gian Đo (YYYY-MM-DD HH:mm:ss)`, `Năm`, `Tháng`, `Ngày`, `Giờ`, `Phút`, `Giây`, `Mực Nước (cm)`, `Lượng Mưa Quy Đổi (mm)`, `Điện Áp Cảm Biến (V)`, `Áp Suất Thủy Tĩnh (Bar)`, `Tỷ Lệ (%)`, `ADC Raw`.
-2. **Sheet 2: `Tong_Hop_Theo_Gio` (Hourly Summary)**:
-   - Tự động gom nhóm theo từng khung giờ trong ngày (`00:00 - 00:59`, `01:00 - 01:59`, ...).
-   - Thống kê: `Số Lượng Mẫu`, `Mực Nước TB (cm)`, `Lượng Mưa TB (mm)`, `Đỉnh Cao Nhất (Max cm)`, `Thấp Nhất (Min cm)`, `Biến Thiên Dâng (cm)`.
-3. **Sheet 3: `Tong_Hop_Theo_Ngay` (Daily Summary)**:
-   - Tự động gom nhóm theo từng ngày: `Tổng Mẫu Ngày`, `Mực Nước TB Ngày (cm)`, `Lượng Mưa TB Ngày (mm)`, `Đỉnh Nước Ngày (Max cm)`, `Mực Nước Đáy Ngày (Min cm)`, `Biên Độ Biến Động (cm)`.
-4. **Sheet 4: `Tong_Hop_Theo_Nam` (Yearly / Monthly Summary)**:
-   - Tự động gom nhóm 12 tháng trong năm để phục vụ phân tích quy luật theo mùa.
+Thư mục này chứa dịch vụ Backend hợp nhất (`service.py`) dùng để thu thập dữ liệu mực nước từ **ESP32-C3 / STM32** qua **MQTT (HiveMQ)**, lưu trữ vĩnh viễn vào **PostgreSQL (Supabase)** hoặc **SQLite (WAL)**, và cung cấp **REST API** cho Web Dashboard.
 
 ---
 
-## 2. Cách 1: Sử Dụng Trực Tiếp Trên Web Dashboard (Tiện lợi nhất)
+## 1. Thành phần chính
 
-1. Mở file [web_dashboard/index.html](file:///d:/Embedded/esp32/wifiesp32/web_dashboard/index.html) bằng bất kỳ trình duyệt nào (Chrome, Edge, Firefox, Cốc Cốc).
-2. Trang web sẽ tự động kết nối tới MQTT Broker và lưu dữ liệu vào cơ sở dữ liệu cục bộ **IndexedDB** của trình duyệt.
-3. Ở khu vực **"Cơ Sở Dữ Liệu Nghiên Cứu & Trích Xuất Excel"**:
-   - Chọn bộ lọc: **Năm**, **Tháng**, **Ngày cụ thể**, hoặc **Từ giờ ... Đến giờ**.
-   - Bấm **"Tra Cứu / Lọc Dữ Liệu"** để xem thống kê nhanh (Số mẫu, TB, Max, Min) và bảng xem trước 15 dòng.
-   - Bấm nút xanh **📗 Xuất Báo Cáo Excel (.xlsx)** để tải ngay file Excel đa tầng về máy tính.
-   - Hoặc bấm **🧪 Thử nghiệm (+50 mẫu)** để tạo dữ liệu test giả lập và kiểm tra ngay.
+| Tệp | Chức năng |
+| :--- | :--- |
+| `service.py` | Dịch vụ chính gồm: MQTT Background Worker + DualDB Manager (Supabase PostgreSQL / SQLite WAL) + Flask REST API Server |
+| `migrate_to_supabase.py` | Script nạp toàn bộ dữ liệu lịch sử từ `rainfall_data.db` (SQLite) lên Supabase PostgreSQL theo lô (*batch insert*), tự chống trùng lặp |
+| `requirements.txt` | Danh sách thư viện Python cần thiết (`flask`, `gunicorn`, `paho-mqtt`, `psycopg2-binary`, `pandas`, `openpyxl`, `python-dotenv`) |
+| `.env.example` | Mẫu biến môi trường — sao chép thành `.env` để cấu hình cục bộ (không đẩy `.env` lên Git) |
+| `run_service.bat` | Script chạy nhanh `service.py` trên Windows |
+| `test_sender.py` | Script phát gói tin MQTT giả lập để kiểm thử độc lập khi chưa cắm phần cứng |
 
 ---
 
-## 3. Cách 2: Sử Dụng Script Python Chạy Ngầm (Thu Thập Dài Hạn)
+## 2. Cơ chế hoạt động Dual-Mode Database
 
-Phương án này cực kỳ thích hợp khi bạn muốn cắm máy tính để thu thập dữ liệu liên tục nhiều ngày, nhiều tháng:
+`service.py` sử dụng lớp bọc `DualDBConnection` giúp chạy mượt trên cả môi trường Cloud và máy cá nhân:
 
-### Bước 1: Khởi chạy
-- **Cách đơn giản nhất:** Double-click chuột trái vào file `run_logger.bat`.
-- Hoặc mở Command Prompt / PowerShell trong thư mục này và gõ:
-  ```bash
-  python logger_to_excel.py
-  ```
+- **Chế độ Cloud (Supabase PostgreSQL):** Tự kích hoạt khi biến môi trường `DATABASE_URL` có tiền tố `postgresql://` (tự động bật `sslmode=require`). Dữ liệu được lưu vĩnh viễn, không bị mất khi Render ngủ hoặc deploy lại.
+- **Chế độ Local (SQLite WAL):** Tự kích hoạt khi để trống `DATABASE_URL`. Lưu vào file `rainfall_data.db` với `PRAGMA journal_mode = WAL` giúp đọc/ghi đồng thời không bị khóa file.
 
-### Bước 2: Theo dõi
-- Chương trình sẽ in ra màn hình mỗi khi nhận và ghi một mẫu dữ liệu:
-  ```
-  [08:15:30] #0045 | Mực nước:  85.2 cm | Mưa: 852.0 mm | Volt: 0.65 V | Áp suất: 0.084 Bar
-  ```
-- Cứ mỗi 30 giây (hoặc khi bạn nhấn `Ctrl + C` để dừng), chương trình sẽ tự động cập nhật và đóng gói toàn bộ dữ liệu vào file `Bao_Cao_Luong_Mua_Nghien_Cuu.xlsx`.
+---
 
-### Bước 3: Kiểm thử độc lập (Khi chưa cắm phần cứng)
-Nếu bạn muốn kiểm tra xem Python logger có ghi đúng vào Excel không trước khi đấu nối STM32, hãy mở một cửa sổ terminal khác và chạy:
-```bash
-python test_sender.py
+## 3. Chạy cục bộ (Local PC)
+
+```powershell
+# 1. Tạo tệp cấu hình từ mẫu
+Copy-Item .env.example .env
+
+# 2. Cài đặt thư viện Python (khuyên dùng Python 3.11)
+pip install -r requirements.txt
+
+# 3. Khởi chạy Backend (hoặc double-click run_service.bat)
+python service.py
 ```
-Script `test_sender.py` sẽ tự động đóng vai cảm biến, phát các bản tin MQTT giả lập để bạn xem quá trình ghi Excel diễn ra trực tiếp!
+
+Sau khi chạy, mở trình duyệt tại `http://localhost:5000` (Backend phục vụ sẵn cả giao diện Web Dashboard và toàn bộ REST API).
+
+---
+
+## 4. Triển khai trên Render Cloud + Supabase
+
+1. Cấu hình start command (đã khai báo sẵn trong `render.yaml` ở thư mục gốc):
+   ```bash
+   gunicorn --workers 1 --threads 4 --bind 0.0.0.0:$PORT service:app
+   ```
+   > **Lưu ý:** Dùng `--workers 1` để tránh tạo nhiều tiến trình MQTT Worker ghi trùng gói tin vào CSDL, kết hợp `--threads 4` để xử lý đồng thời các yêu cầu HTTP.
+2. Thêm biến môi trường trong **Render Dashboard → Environment**:
+   - `DATABASE_URL`: chuỗi kết nối **Session Pooler** của Supabase (`postgresql://postgres.<ref>:<password>@aws-...pooler.supabase.com:5432/postgres`).
+   - `ADMIN_API_KEY`: khóa bí mật dùng cho header `X-Admin-Token` khi gọi các API nhạy cảm (`/api/database/clear`, `/api/simulate`, `/api/import/indexeddb`).
+   - `TIMEOUT_MINUTES`: `2.0` (ngưỡng báo mất dữ liệu nếu quá 2 phút không nhận gói mới).
+3. *(Tùy chọn)* Di trú dữ liệu lịch sử từ máy tính lên Supabase:
+   ```powershell
+   $env:DATABASE_URL="postgresql://..."
+   python migrate_to_supabase.py
+   ```
+
+---
+
+## 5. Bảo mật & Tiện ích dữ liệu
+
+- **Lọc trùng & Kiểm duyệt:** Tự động bỏ qua gói tin trùng trong `< 1.0s`, loại bỏ JSON thiếu trường, giá trị `NaN/Inf`, hoặc `raw_adc` ngoài dải `[0, 4095]`.
+- **Xác thực quản trị:** Các endpoint xóa/nạp giả lập yêu cầu `X-Admin-Token` (chế độ **fail-closed** trên Render nếu chưa thiết lập `ADMIN_API_KEY`). Trước khi xóa dữ liệu, hệ thống bắt buộc xác nhận `"XOA"` và tự tạo bản sao lưu `.db`.
+- **Xuất dữ liệu đa định dạng:**
+  - `/api/export.xlsx`: File Excel gồm sheet thống kê tổng hợp và chi tiết mẫu đo (giờ Việt Nam UTC+7).
+  - `/api/export.csv`: File CSV có gắn **UTF-8 BOM** mở thẳng trên Excel không lỗi font tiếng Việt.
+  - `/api/database/download`: Tải trực tiếp file `.db` SQLite (tự động dựng snapshot từ Supabase nếu đang chạy Cloud).
