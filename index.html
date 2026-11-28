@@ -284,7 +284,7 @@
 
                 <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
                     <div class="flex items-center gap-2">
-                        <button onclick="applyFilter()" class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-4 py-2 rounded-lg font-medium transition shadow flex items-center gap-1.5">
+                        <button onclick="triggerSearchFilter()" class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-4 py-2 rounded-lg font-medium transition shadow flex items-center gap-1.5">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                             Tra Cứu / Lọc Dữ Liệu
                         </button>
@@ -742,6 +742,8 @@
 
         let historyChartInstance = null;
         let flatpickrInstance = null;
+        let pendingSingleDate = null;
+        let wasExplicitlyCleared = false;
 
         function formatFullDateTimeVN(epochMs) {
             if (!epochMs || isNaN(epochMs)) return '--/--/---- --:--:--';
@@ -1122,11 +1124,14 @@
         }
 
         function clearDateFilter() {
+            pendingSingleDate = null;
+            wasExplicitlyCleared = true;
             if (flatpickrInstance) {
                 flatpickrInstance.clear();
             } else {
                 document.getElementById('filter-date').value = '';
             }
+            wasExplicitlyCleared = false;
             currentPage = 1;
             applyFilter();
         }
@@ -1135,6 +1140,7 @@
             const pad = (n) => String(n).padStart(2, '0');
             const fmt = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
             const now = new Date();
+            pendingSingleDate = null;
 
             // CỐ ĐỊNH KHUNG GIỜ: Giữ nguyên khung giờ người dùng đã chọn khi chuyển giữa các ngày,
             // chỉ reset về 00:00 - 23:59 khi người dùng bấm "Tất cả thời gian"
@@ -1166,13 +1172,26 @@
                     document.getElementById('filter-date').value = `${fmt(firstDay)} đến ${fmt(lastDay)}`;
                 }
             } else if (type === 'all') {
+                wasExplicitlyCleared = true;
                 if (flatpickrInstance) {
                     flatpickrInstance.clear();
                 } else {
                     document.getElementById('filter-date').value = '';
                 }
+                wasExplicitlyCleared = false;
             }
 
+            currentPage = 1;
+            applyFilter();
+        }
+
+        function triggerSearchFilter() {
+            // Nếu người dùng vừa bấm chọn 1 ngày đơn trên lịch rồi bấm thẳng nút Tra Cứu -> Chốt ngay ngày đó!
+            if (pendingSingleDate && flatpickrInstance) {
+                const d = pendingSingleDate;
+                pendingSingleDate = null;
+                flatpickrInstance.setDate([d, d], false);
+            }
             currentPage = 1;
             applyFilter();
         }
@@ -1245,6 +1264,11 @@
                 const resTable = await fetch(`${API_BASE_URL}/api/measurements?${tableParams.toString()}`);
                 if (resTable.ok) {
                     const tableData = await resTable.json();
+                    // Nếu đang đứng ở trang lớn hơn tổng số trang của bộ lọc mới -> Tự quay về trang 1
+                    if (currentPage > 1 && tableData.total > 0 && tableData.offset >= tableData.total) {
+                        currentPage = 1;
+                        return applyFilter();
+                    }
                     renderTableRows(tableData.data, tableData.offset);
                     updatePaginationControls(tableData.total, tableData.offset, tableData.data.length);
                     document.getElementById('db-count-badge').innerText = `${tableData.total.toLocaleString()} mẫu`;
@@ -1274,12 +1298,15 @@
         }
 
         function resetFilter() {
+            pendingSingleDate = null;
+            wasExplicitlyCleared = true;
             document.getElementById('filter-source').value = 'REAL';
             if (flatpickrInstance) {
                 flatpickrInstance.clear();
             } else {
                 document.getElementById('filter-date').value = '';
             }
+            wasExplicitlyCleared = false;
             document.getElementById('filter-hour-start').value = '0';
             document.getElementById('filter-hour-end').value = '23';
             currentPage = 1;
@@ -2007,11 +2034,37 @@
 
             flatpickrInstance = flatpickr("#filter-date", {
                 mode: "range",
-                conjunction: " đến ",
                 dateFormat: "d/m/Y",
-                locale: "vn",
+                locale: Object.assign({}, (flatpickr.l10ns && flatpickr.l10ns.vn) ? flatpickr.l10ns.vn : {}, {
+                    rangeSeparator: " đến "
+                }),
                 allowInput: true,
-                onClose: () => {
+                onChange: (selectedDates) => {
+                    if (selectedDates.length === 1) {
+                        // Lưu lại ngày đơn người dùng vừa bấm 1 lần (tránh Flatpickr tự xóa khi đóng lịch)
+                        pendingSingleDate = selectedDates[0];
+                        wasExplicitlyCleared = false;
+                    } else if (selectedDates.length === 2) {
+                        pendingSingleDate = null;
+                        wasExplicitlyCleared = false;
+                        currentPage = 1;
+                        applyFilter();
+                    }
+                },
+                onClose: (selectedDates, dateStr, instance) => {
+                    // Nếu người dùng chỉ bấm 1 ngày đơn (VD: ngày 23) rồi bấm ra ngoài hoặc bấm Tra Cứu:
+                    // Chốt luôn ngày đó làm [23/11, 23/11] thay vì để Flatpickr xóa trắng thành "Tất cả thời gian"!
+                    if (selectedDates.length === 1) {
+                        const d = selectedDates[0];
+                        pendingSingleDate = null;
+                        instance.setDate([d, d], false);
+                    } else if (selectedDates.length === 0 && pendingSingleDate && !wasExplicitlyCleared) {
+                        const d = pendingSingleDate;
+                        pendingSingleDate = null;
+                        instance.setDate([d, d], false);
+                    }
+                    wasExplicitlyCleared = false;
+                    currentPage = 1;
                     applyFilter();
                 }
             });
@@ -2020,7 +2073,7 @@
             if (dateInput) {
                 dateInput.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
-                        applyFilter();
+                        triggerSearchFilter();
                     }
                 });
             }
